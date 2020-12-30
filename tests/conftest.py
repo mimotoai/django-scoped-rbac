@@ -59,15 +59,14 @@ def pytest_configure(config):
             "django.contrib.auth.hashers.MD5PasswordHasher",
             "django.contrib.auth.hashers.CryptPasswordHasher",
         ),
-        # TODO
         REST_FRAMEWORK={
             "DEFAULT_PERMISSION_CLASSES": [
                 "scoped_rbac.permissions.IsAuthorized",
-                # "rest_framework.permissions.IsAdminUser",
             ],
-            # 'DEFAULT_AUTHENTICATION_CLASSES': [
-            # 'rest_framework.authentication.BasicAuthentication',
-            # ],
+        },
+        SCOPED_RBAC={
+            "POLICY_FOR_UNAUTHENTICATED": "tests.policy.policy_for_unauthenticated",
+            "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
         },
     )
 

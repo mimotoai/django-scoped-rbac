@@ -22,7 +22,7 @@ class TestUser:
     instance: object
 
 
-def create_user(is_super=False):
+def create_user(is_super=False, is_staff=False):
     fake = Faker()
     name = fake.pystr(min_chars=10, max_chars=20)
     email = f"{name}@example.com"
@@ -31,7 +31,11 @@ def create_user(is_super=False):
         user = User.objects.create_superuser(name, email, passwd)
     else:
         user = User.objects.create(
-            username=name, email=email, password=passwd, is_active=True
+            username=name,
+            email=email,
+            password=passwd,
+            is_active=True,
+            is_staff=is_staff,
         )
     user.save()
     return TestUser(name, email, passwd, user)
@@ -39,14 +43,12 @@ def create_user(is_super=False):
 
 @pytest.fixture()
 def superuser(transactional_db):
-    # fake = Faker()
-    # name = fake.pystr(min_chars=10, max_chars=20)
-    # email = f"{name}@example.com"
-    # passwd = fake.pystr(min_chars=12, max_chars=20)
-    # superuser = User.objects.create_superuser(name, email, passwd,)
-    # superuser.save()
-    # return TestUser(name, email, passwd, superuser)
     return create_user(is_super=True)
+
+
+@pytest.fixture()
+def staff_user(transactional_db):
+    return create_user(is_staff=True)
 
 
 @pytest.fixture()
@@ -241,3 +243,67 @@ def test_get_user_rbac_policy(superuser, editor_user):
             SOME_CONTEXT: role_in_context1_json["definition"],
         }
     )
+
+
+@pytest.mark.django_db
+@scripted_test
+def test_unauthenticated_user():
+    # unauthenticated users may post this resource type in the DEFAULT_CONTEXT per the
+    # POLICY_FOR_UNATHENTICATED provided in settings (conftest.py).
+    When.http.post(
+        reverse("exampleaccesscontrolledmodel-list"),
+        {"name": "foo"},
+        format="json",
+    )
+    Then.http.status_code_is(201)
+    location = http_response["location"]
+
+    When.http.get(location)
+    Then.http.status_code_is(403)
+
+    When.http.put(location, {"name": "bar"}, format="json")
+    Then.http.status_code_is(403)
+
+    When.http.delete(location)
+    Then.http.status_code_is(403)
+
+    When.http.get(reverse("exampleaccesscontrolledmodel-list"))
+    Then.http.status_code_is(403)
+
+
+@pytest.mark.django_db
+@scripted_test
+def test_staff_user(superuser, staff_user):
+    # staff users may get list and detail views of this resource type in the
+    # DEFAULT_CONTEXT per the POLICY_FOR_UNATHENTICATED provided in settings
+    # (conftest.py).
+
+    # first, create a resource in the collection
+    Given.http.force_authenticate(user=superuser.instance)
+    When.http.post(
+        reverse("exampleaccesscontrolledmodel-list"),
+        {"name": "foo"},
+        format="json",
+    )
+    Then.http.status_code_is(201)
+    resource_instance_url = http_response["location"]
+
+    Given.http.force_authenticate(user=staff_user.instance)
+    When.http.get(reverse("exampleaccesscontrolledmodel-list"))
+    Then.http.status_code_is(200)
+
+    When.http.get(resource_instance_url)
+    Then.http.status_code_is(200)
+
+    When.http.post(
+        reverse("exampleaccesscontrolledmodel-list"),
+        {"name": "foo"},
+        format="json",
+    )
+    Then.http.status_code_is(403)
+
+    When.http.put(resource_instance_url, {"name": "bar"}, format="json")
+    Then.http.status_code_is(403)
+
+    When.http.delete(resource_instance_url)
+    Then.http.status_code_is(403)

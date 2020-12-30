@@ -64,7 +64,7 @@ pytest-cov==2.8.1
 pytest-django==3.8.0
 python-dateutil==2.8.1
 pytz==2019.3
-PyYAML==5.3
+PyYAML>=5.3
 re-ver==0.4.3
 readme-renderer==24.0
 requests==2.22.0

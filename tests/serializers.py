@@ -1,7 +1,7 @@
 from datetime import datetime
 from drf_scrud.serializers import EnvelopeCollectionSerializer, EnvelopeItemSerializer
 from rest_framework import serializers
-from rest_framework.reverse import reverse_lazy
+from rest_framework.reverse import reverse
 from .models import ExampleAccessControlledModel
 import hashlib
 
@@ -15,7 +15,7 @@ class ExampleAccessControlledModelSerializer(
         list_serializer_class = EnvelopeCollectionSerializer
 
     def absolute_url_for(self, item):
-        return reverse_lazy("examplerbaccontext-detail", pk=item.pk)
+        return reverse("exampleaccesscontrolledmodel-detail", args=[item.pk])
 
     @classmethod
     def etag_for(cls, item=None, *arg, pk=None, **kwarg):

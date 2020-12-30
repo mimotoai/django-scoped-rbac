@@ -232,7 +232,7 @@ class PolicyDict(Policy):
 
 class CompoundPolicy(Policy):
     def __init__(self, policy_dict=None, policy_set=None, expressions=None):
-        self.policy_dict = policy_dict or PolicyDict()
+        self.policy_dict = policy_dict or PolicyDict({})
         if policy_set:
             self.policy_dict = self.policy_dict.sum_with(policy_set)
         self.expressions = expressions or ExpressionList()
