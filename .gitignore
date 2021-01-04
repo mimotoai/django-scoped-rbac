@@ -52,3 +52,6 @@ MANIFEST
 
 # Rever
 rever/
+
+# Example application database
+examples/db.sqlite3

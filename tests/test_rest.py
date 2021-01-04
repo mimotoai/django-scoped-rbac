@@ -127,7 +127,7 @@ def test_simple_role_assignment(superuser, editor_user, not_authorized_user):
 
     # Update the resource
     updated_content = {"definition": {"GET": True}, "rbac_context": context_url}
-    When.http.put(protected_resource_url, updated_content, format="json")
+    When.put_safe(protected_resource_url, updated_content, format="json")
     Then.http.status_code_is(200)
     When.http.get(protected_resource_url)
     Then.http.status_code_is(200)
@@ -176,8 +176,8 @@ def test_simple_role_assignment(superuser, editor_user, not_authorized_user):
     # Switch to the editor_user
     # delete the resource
     Given.http.force_authenticate(user=editor_user.instance)
-    And.http.get(protected_resource_content)
-    And.http.delete(protected_resource_url)
+    And.http.get(protected_resource_url)
+    And.delete_safe(protected_resource_url)
     Then.http.status_code_is_one_of(200, 204)
 
     # double check it's gone

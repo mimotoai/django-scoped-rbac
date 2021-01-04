@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
 
 # from django.urls import reverse
 from rest_framework import status
@@ -8,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from scrudful.rest_framework import scrudful_viewset
 from .filters import RbacFilter
 from .models import Role, RoleAssignment, UserResourceType
 from .permissions import DEFAULT_CONTEXT, policy_for
@@ -95,10 +97,20 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         return super().delete(request, *args, **kwargs)
 
 
+@scrudful_viewset
 class RoleViewSet(AccessControlledModelViewSet):
     """
     TODO restrict queryset to authorized contexts for user
     """
+
+    class Meta:
+        def etag_func(view_instance, request, pk: str):
+            instance = get_object_or_404(Role, pk=int(pk))
+            return instance.etag
+
+        def last_modified_func(view_instance, request, pk: str):
+            instance = get_object_or_404(Role, pk=int(pk))
+            return instance.modified_at
 
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
@@ -113,6 +125,15 @@ class RoleAssignmentViewSet(AccessControlledModelViewSet):
     """
     TODO restrict queryset to authorized contexts for user
     """
+
+    class Meta:
+        def etag_func(view_instance, request, pk: str):
+            instance = get_object_or_404(RoleAssignment, pk=int(pk))
+            return instance.etag
+
+        def last_modified_func(view_instance, request, pk: str):
+            instance = get_object_or_404(RoleAssignment, pk=int(pk))
+            return instance.modified_at
 
     queryset = RoleAssignment.objects.all()
     serializer_class = RoleAssignmentSerializer

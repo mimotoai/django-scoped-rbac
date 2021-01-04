@@ -40,6 +40,8 @@ class AccessControlledModel(IdentifiedByIRI, models.Model):
 
 class Role(AccessControlledModel):
     definition = JSONField(null=False)
+    modified_at = models.DateTimeField()
+    etag = models.CharField(max_length=40)
 
     # Required by AccessControlled
     resource_type = ResourceType(
@@ -59,6 +61,8 @@ class RoleAssignment(AccessControlledModel):
         "RoleAssignment",
         "The assignment of an rbac.Role to a User.",
     )
+    modified_at = models.DateTimeField()
+    etag = models.CharField(max_length=40)
 
 
 # TODO Figure out how to support custom User models
