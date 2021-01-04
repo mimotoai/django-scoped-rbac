@@ -10,7 +10,7 @@ description = "A rich and flexible Django application for role-based access cont
 authors = ["David Charboneau <david@adadabase.com>"]
 license = "MIT"
 packages = [
-  { include = "scoped_rbac" },
+  { include = "src/scoped_rbac" },
 ]
 
 [tool.poetry.dependencies]
