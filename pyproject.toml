@@ -9,6 +9,9 @@ version = "0.2.0"
 description = "A rich and flexible Django application for role-based access control within distinct access control scopes supporting Django Rest Framework."
 authors = ["David Charboneau <david@adadabase.com>"]
 license = "MIT"
+packages = [
+  { include = "scoped_rbac" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.7"
