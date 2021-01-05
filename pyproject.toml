@@ -5,12 +5,12 @@ target-version = ["py36", "py37", "py38"]
 
 [tool.poetry]
 name = "django-scoped-rbac"
-version = "0.2.0"
+version = "0.2.1"
 description = "A rich and flexible Django application for role-based access control within distinct access control scopes supporting Django Rest Framework."
 authors = ["David Charboneau <david@adadabase.com>"]
 license = "MIT"
 packages = [
-  { include = "src/scoped_rbac" },
+  { include = "scoped_rbac", from = "src"},
 ]
 
 [tool.poetry.dependencies]
