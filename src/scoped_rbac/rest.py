@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 
 # from django.urls import reverse
@@ -12,7 +12,7 @@ from rest_framework.viewsets import ModelViewSet
 from scrudful.rest_framework import scrudful_viewset
 from .filters import RbacFilter
 from .models import Role, RoleAssignment, UserResourceType
-from .permissions import DEFAULT_CONTEXT, policy_for
+from .permissions import policy_for
 from .serializers import RoleSerializer, RoleAssignmentSerializer, UserSerializer
 
 
@@ -150,7 +150,7 @@ class UserViewSet(AccessControlledModelViewSet):
     TODO restrict queryset to authorized contexts for user
     """
 
-    queryset = User.objects.all()
+    queryset = get_user_model().objects.all()
     serializer_class = UserSerializer
     pagination_class = DefaultPageNumberPagination
 

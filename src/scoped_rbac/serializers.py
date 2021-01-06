@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils.timezone import now
 from rest_framework import serializers
 from uuid import uuid4
@@ -29,5 +29,5 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
     """User Serialization"""
 
     class Meta:
-        model = User
+        model = get_user_model()
         fields = ("url", "username", "email", "first_name", "last_name", "id", )
