@@ -260,6 +260,8 @@ def test_unauthenticated_user():
 
     When.http.get(location)
     Then.http.status_code_is(200)
+    When.http.head(location)
+    Then.http.status_code_is(200)
 
     When.http.put(location, {"name": "bar"}, format="json")
     Then.http.status_code_is(403)
@@ -268,6 +270,8 @@ def test_unauthenticated_user():
     Then.http.status_code_is(403)
 
     When.http.get(reverse("exampleaccesscontrolledmodel-list"))
+    Then.http.status_code_is(403)
+    When.http.head(reverse("exampleaccesscontrolledmodel-list"))
     Then.http.status_code_is(403)
 
 
@@ -291,8 +295,12 @@ def test_staff_user(superuser, staff_user):
     Given.http.force_authenticate(user=staff_user.instance)
     When.http.get(reverse("exampleaccesscontrolledmodel-list"))
     Then.http.status_code_is(200)
+    When.http.head(reverse("exampleaccesscontrolledmodel-list"))
+    Then.http.status_code_is(200)
 
     When.http.get(resource_instance_url)
+    Then.http.status_code_is(200)
+    When.http.head(resource_instance_url)
     Then.http.status_code_is(200)
 
     When.http.post(

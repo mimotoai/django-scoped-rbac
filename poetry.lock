@@ -473,11 +473,12 @@ testing = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "safetydance-django"
-version = "0.0.5"
+version = "0.0.5.post0.dev1+g9a12551"
 description = "A collection of safetydance_test steps for BDD testing of Django REST Framework applications."
 category = "dev"
 optional = false
 python-versions = "*"
+develop = false
 
 [package.dependencies]
 django = "*"
@@ -490,6 +491,12 @@ type-extensions = "*"
 
 [package.extras]
 testing = ["pytest", "pytest-cov"]
+
+[package.source]
+type = "git"
+url = "https://gitlab.com/openteams/safetydance_django.git"
+reference = "master"
+resolved_reference = "9a125516e96b7ed0fc0bab21e8c5c4a9a25996be"
 
 [[package]]
 name = "safetydance-test"
@@ -747,7 +754,7 @@ testing = ["pytest (>=3.5,!=3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "3036081a04f3b72abf272f5be09b5523cf8778e3ad081cd35b78eaaf8730015a"
+content-hash = "7489bc6d84af590895512dce2535b7b977d2bc87487e79bf4be580b795c378a9"
 
 [metadata.files]
 alabaster = [
@@ -1011,10 +1018,7 @@ safetydance = [
     {file = "safetydance-0.2.0-py2.py3-none-any.whl", hash = "sha256:83bc09d1f2ade9281ecfc79919f6bbadb62e439de145708d13fdf1b8d61ac709"},
     {file = "safetydance-0.2.0.tar.gz", hash = "sha256:9e327fd146c376b7e6aeef232c76fffa14128b39f141787169d0f1bbb0650795"},
 ]
-safetydance-django = [
-    {file = "safetydance_django-0.0.5-py2.py3-none-any.whl", hash = "sha256:13b1ab1fb38bd88f20789fc7fa109681ef48f00cbeb5461834393e224d9535a9"},
-    {file = "safetydance_django-0.0.5.tar.gz", hash = "sha256:1435302e1879af5dc7f1bf8220507da5b1096880d3755d489d79ddfd9cc5d25b"},
-]
+safetydance-django = []
 safetydance-test = [
     {file = "safetydance_test-0.1.4-py2.py3-none-any.whl", hash = "sha256:7440813f88fb2b1c978333d1b59ccaccd36115c3452f60cf9d5143d90780b568"},
     {file = "safetydance_test-0.1.4.tar.gz", hash = "sha256:5f5f4e9bdcf144bf34aaeddda008a1898a15910038d0f727ef94d9a3a587e2cb"},

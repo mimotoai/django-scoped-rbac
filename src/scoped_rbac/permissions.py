@@ -52,7 +52,10 @@ def policy_for(request):
 
 
 def http_action_iri_for(request):
-    return f"http.{request.method}"
+    method = request.method
+    if method == "HEAD":
+        method = "GET"
+    return f"http.{method}"
 
 
 class IsAuthorized(permissions.BasePermission):
