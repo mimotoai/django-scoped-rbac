@@ -21,15 +21,9 @@ class ExampleAccessControlledModelViewSet(AccessControlledModelViewSet):
 
     def context_id_for(self, request):
         return DEFAULT_CONTEXT
-        # TODO Is this a collection or an item?
-        # if request.method = "POST":
-        # return DEFAULT_CONTEXT
-        # else:
-        # return item
 
-    def resource_type_iri_for(self, request):
-        # TODO is this the collection or an item?
-        # Also... need an IRI for collections...
+    @property
+    def resource_type_iri(self):
         return f"{ExampleAccessControlledModel.resource_type.iri}"
 
     @condition(

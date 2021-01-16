@@ -259,7 +259,7 @@ def test_unauthenticated_user():
     location = http_response["location"]
 
     When.http.get(location)
-    Then.http.status_code_is(403)
+    Then.http.status_code_is(200)
 
     When.http.put(location, {"name": "bar"}, format="json")
     Then.http.status_code_is(403)
