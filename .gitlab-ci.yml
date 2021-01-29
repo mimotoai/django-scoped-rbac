@@ -1,0 +1,19 @@
+image: continuumio/miniconda3:latest
+
+before_script:
+  - conda env create -f environment.yml
+  - source activate scoped-rbac
+  - conda install -c conda-forge make
+
+pages:
+  script:
+  - mkdir -p public
+  - make clean
+  - make html
+  - cp -r build/html/* public/.
+  artifacts:
+    paths:
+      - public
+#   only:
+#     - master
+#     - merge_request
