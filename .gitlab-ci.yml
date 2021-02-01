@@ -9,7 +9,7 @@ pages:
   script:
   - mkdir -p public
   - cd docs
-  - make Makefile html
+  - make html
   - cp -r build/html/* ~/public/.
   artifacts:
     paths:
