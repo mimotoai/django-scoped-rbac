@@ -8,7 +8,7 @@ before_script:
 pages:
   script:
   - mkdir -p public
-  - make html
+  - make -f docs/Makefile html
   - cp -r build/html/* public/.
   artifacts:
     paths:
