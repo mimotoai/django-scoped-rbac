@@ -4,7 +4,7 @@ before_script:
   - conda env create -f environment.yml
   - source activate scoped-rbac
   - conda install -c conda-forge make
-  - conda install -c anaconda psycopg2
+  - conda install -c anaconda psycopg2 sphinx_rtd_theme
 
 pages:
   script:
