@@ -27,4 +27,5 @@ dependencies:
   - django-rest-framework-condition
   - drf-extensions
   - pyscaffold
+  - sphinxcontrib-django
 name: scoped-rbac
