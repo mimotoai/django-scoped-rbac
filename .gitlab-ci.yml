@@ -11,7 +11,7 @@ pages:
   - mkdir -p public
   - cd docs
   - make html
-  - cp -r build/html/* ~/public/.
+  - cp -r ../build/sphinx/html/* ../public/.
   artifacts:
     paths:
       - public
