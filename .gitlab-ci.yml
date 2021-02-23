@@ -1,0 +1,20 @@
+image: continuumio/miniconda3:latest
+
+before_script:
+  - conda env create -f environment.yml
+  - source activate scoped-rbac
+  - conda install -c conda-forge make
+  - conda install -c anaconda psycopg2 sphinx_rtd_theme
+
+pages:
+  script:
+  - mkdir -p public
+  - cd docs
+  - make html
+  - cp -r ../build/sphinx/html/* ../public/.
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
+    - merge_request
