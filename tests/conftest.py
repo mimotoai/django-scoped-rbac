@@ -46,6 +46,7 @@ def pytest_configure(config):
             "django.contrib.sites",
             "django.contrib.messages",
             "django.contrib.staticfiles",
+            "django_jsonfield_backport",
             "rest_framework",
             "rest_framework.authtoken",
             "scoped_rbac",

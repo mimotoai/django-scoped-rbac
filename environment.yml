@@ -2,30 +2,5 @@ channels:
 - conda-forge
 - defaults
 dependencies:
-- python=3.7
-- django=2.2
-- djangorestframework=3.11.0
-- black
-- factory_boy
-- faker
-- flake8
-- pip
-- pytest
-- pytest-cov
-- pytest-django
-- python-coreapi
-- requests
-- sqlite
-- sphinx
-- rever
-- twine
-- pip:
-  - conda-merge
-  - django-appconf
-  - django_extensions
-  - safetydance_django
-  - django-rest-framework-condition
-  - drf-extensions
-  - pyscaffold
-  - sphinxcontrib-django
+- python=3.8
 name: scoped-rbac

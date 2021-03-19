@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
+from django_jsonfield_backport.models import JSONField
 from .policy import policy_from_json
-from .fields import JSONField
 from .registry import ResourceType, register_access_controlled_model
 
 
