@@ -4,9 +4,13 @@ RBAC Policies, with stubbed-out support for conditional expressions.
 
 from celpy.celtypes import BoolType
 from collections import namedtuple
-from .conf import cel_functions
+from .conf import cel_functions, operators
 import celpy
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 Permission = namedtuple("Permission", "action, resource_type")
@@ -93,7 +97,7 @@ class Expression(Policy):
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):
             return other_policy.sum_with(self)
-        if isinstance(other_policy, Expression):
+        if isinstance(other_policy, Expression) or isinstance(other_policy, Operator):
             return ExpressionList(self, other_policy)
         if isinstance(other_policy, PolicySet):
             return CompoundPolicy(expression=self, policy_set=other_policy)
@@ -113,6 +117,50 @@ class Expression(Policy):
         return Expression(json_policy)
 
 
+class Operator(Policy):
+    """
+    Expression policies are initialized with a `dict` detailing the parameters
+    to use in evaluating the expression to determine whether the policy
+    conditions are met.
+    """
+
+    def __init__(self, configuration):
+        print(configuration)
+        self.configuration = configuration
+        self.operator_name = configuration.get("operator", None)
+        self.operator = None
+
+    @property
+    def resolved_operator(self):
+        return operators().get(self.operator_name)
+
+    def should_allow(self, *args, resource=None, **kwargs):
+        return self.resolved_operator(resource)
+
+    def sum_with(self, other_policy):
+        if isinstance(other_policy, PolicyBoolean):
+            return other_policy.sum_with(self)
+        if isinstance(other_policy, Expression) or isinstance(other_policy, Operator):
+            return ExpressionList(self, other_policy)
+        if isinstance(other_policy, PolicySet):
+            return CompoundPolicy(expression=self, policy_set=other_policy)
+        if isinstance(other_policy, PolicyDict):
+            return CompoundPolicy(expression=self, policy_dict=other_policy)
+        if isinstance(other_policy, CompoundPolicy):
+            return other_policy.add_expression(self)
+
+    def __repr__(self):
+        return json.dumps(self.configuration)
+
+    def to_json(self):
+        return self.expression
+
+    @classmethod
+    def from_json(cls, json_policy):
+        return Expression(json_policy)
+
+
+
 class ExpressionList(Policy):
     def __init__(self, *args):
         self.expressions = args
@@ -126,7 +174,7 @@ class ExpressionList(Policy):
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):
             return other_policy.sum_with(self)
-        if isinstance(other_policy, Expression):
+        if isinstance(other_policy, Expression or isinstance(other_policy, Operator)):
             return self.add(other_policy)
         if isinstance(other_policy, PolicySet):
             return CompoundPolicy(expression=self, policy_set=other_policy)
@@ -163,6 +211,7 @@ class PolicySet(Policy):
         if (
             isinstance(other_policy, PolicyBoolean)
             or isinstance(other_policy, Expression)
+            or isinstance(other_policy, Operator)
             or isinstance(other_policy, ExpressionList)
         ):
             return other_policy.sum_with(self)
@@ -208,6 +257,7 @@ class PolicyDict(Policy):
         if (
             isinstance(other_policy, PolicyBoolean)
             or isinstance(other_policy, Expression)
+            or isinstance(other_policy, Operator)
             or isinstance(other_policy, ExpressionList)
         ):
             return other_policy.sum_with(self)
@@ -341,7 +391,8 @@ def action_policy_from_json(json_policy):
     ResourcePolicyList: [ (String::ResourceName | ResourceCondition)+ ]
     ResourcePolicyDict: { (String::ResourceName: (Bool | String::Expr))+ }
     ResourceCondition: { String::ResourceName: String::Expr }
-    Condition: { 'condition': String::Expr }
+    Condition: { 'condition': String::Expr | OperatorConfig }
+    OperatorConfig: { 'operator': String::OperatorName, additionalProperties... }
     ```
     """
     if isinstance(json_policy, bool):
@@ -459,10 +510,14 @@ def policy_from_resource_condition(resource_condition):
 def policy_from_condition(condition):
     """
     ```
-    Condition: { 'condition': String::Expr }
+    Condition: { 'condition': String::Expr |  }
     ```
     """
-    return Expression(condition["condition"])
+    condition_value = condition.get("condition")
+    if isinstance(condition_value, str):
+        return Expression(condition_value)
+    elif isinstance(condition_value, dict) and "operator" in condition_value:
+        return Operator(condition_value)
 
 
 def policy_from_bool(b):
