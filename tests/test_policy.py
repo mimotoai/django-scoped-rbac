@@ -1,14 +1,9 @@
 from scoped_rbac.policy import (
-    CompoundPolicy,
-    Expression,
-    ExpressionList,
     Permission,
-    Policy,
     PolicyDict,
     PolicySet,
     POLICY_TRUE,
     POLICY_FALSE,
-    RootPolicy,
 )
 
 
