@@ -6,10 +6,10 @@ DEFAULTS = {
     "POLICY_FOR_AUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_STAFF": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_UNAUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
-    "CEL_FUNCTIONS": None
+    "CEL_FUNCTIONS": None,
 }
 
-IMPORT_STRINGS = ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_STAFF", ]
+IMPORT_STRINGS = ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_STAFF"]
 
 
 def scoped_rbac_settings():
@@ -70,5 +70,21 @@ def policy_for_staff():
     return import_policy_or_func("POLICY_FOR_STAFF")
 
 
+REGISTERED_CEL_FUNCTIONS = {}
+RETRIEVED_CONFIGURED_CEL_FUNCTIONS = False
+
+
+def register_cel_function(name, func):
+    global REGISTERED_CEL_FUNCTIONS
+    REGISTERED_CEL_FUNCTIONS[name] = func
+
+
 def cel_functions():
-    return import_policy_or_func("CEL_FUNCTIONS")
+    global RETRIEVED_CONFIGURED_CEL_FUNCTIONS
+    global REGISTERED_CEL_FUNCTIONS
+    if not RETRIEVED_CONFIGURED_CEL_FUNCTIONS:
+        RETRIEVED_CONFIGURED_CEL_FUNCTIONS = True
+        configured_cel_functions = import_policy_or_func("CEL_FUNCTIONS")
+        if configured_cel_functions is not None:
+            REGISTERED_CEL_FUNCTIONS.extend(configured_cel_functions)
+    return REGISTERED_CEL_FUNCTIONS
