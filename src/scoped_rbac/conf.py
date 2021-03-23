@@ -6,6 +6,7 @@ DEFAULTS = {
     "POLICY_FOR_AUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_STAFF": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_UNAUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
+    "CEL_FUNCTIONS": None
 }
 
 IMPORT_STRINGS = ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_STAFF", ]
@@ -67,3 +68,7 @@ def policy_for_staff():
        }
     """
     return import_policy_or_func("POLICY_FOR_STAFF")
+
+
+def cel_functions():
+    return import_policy_or_func("CEL_FUNCTIONS")

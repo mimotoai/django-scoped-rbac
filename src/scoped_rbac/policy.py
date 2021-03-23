@@ -4,6 +4,7 @@ RBAC Policies, with stubbed-out support for conditional expressions.
 
 from celpy.celtypes import BoolType
 from collections import namedtuple
+from .conf import cel_functions
 import celpy
 import json
 
@@ -77,7 +78,7 @@ class Expression(Policy):
         if self.compiled_expression_ is None:
             env = celpy.Environment()
             ast = env.compile(self.expression)
-            self.compiled_expression_ = env.program(ast)
+            self.compiled_expression_ = env.program(ast, functions=cel_functions())
         return self.compiled_expression_
 
     def should_allow(self, *args, resource=None, **kwargs):
