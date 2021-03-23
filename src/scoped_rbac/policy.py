@@ -332,7 +332,7 @@ def policy_from_json(json_policy):
 
 
 def action_policy_from_json(json_policy):
-    """The structure of wn RBAC action policy in something like BNF:
+    """The structure of an RBAC action policy in something like BNF:
     ```
     ActionPolicy: Bool | Condition | String::ActionName | ActionPolicyList | ActionPolicyDict
     ActionPolicyList: [ (String::ActionName | ActionCondition)+ ]
