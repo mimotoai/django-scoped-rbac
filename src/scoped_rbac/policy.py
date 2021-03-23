@@ -82,9 +82,11 @@ class Expression(Policy):
         return self.compiled_expression_
 
     def should_allow(self, *args, resource=None, **kwargs):
-        """Expects `resource` to support dictionary access"""
+        """Expects `resource` to support dictionary access or have a `to_cel()` method"""
         if hasattr(resource, "to_cel"):
-            return self.compiled_expression.evaluate(resource.to_cel()) == BoolType(True)
+            return self.compiled_expression.evaluate(resource.to_cel()) == BoolType(
+                True
+            )
         else:
             return self.compiled_expression.evaluate(resource) == BoolType(True)
 
@@ -323,10 +325,7 @@ def policy_from_json(json_policy):
         return policy_from_condition(json_policy)
     elif isinstance(json_policy, dict):
         return PolicyDict(
-            {
-                key: action_policy_from_json(value)
-                for key, value in json_policy.items()
-            }
+            {key: action_policy_from_json(value) for key, value in json_policy.items()}
         )
     else:
         raise Exception(f"Invalid policy content {json_policy}")
@@ -369,6 +368,7 @@ def policy_from_action_policy_list(policy_list):
             return PolicySet(x)
         else:
             return policy_from_action_condition(x)
+
     total = PolicySet()
     for p in policy_list:
         total = total.sum_with(as_policy(p))
@@ -422,6 +422,7 @@ def policy_from_resource_policy_list(policy_list):
             return PolicySet(x)
         else:
             return policy_from_resource_condition(x)
+
     total = PolicySet()
     for p in policy_list:
         total = total.sum_with(as_policy(p))
