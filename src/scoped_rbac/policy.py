@@ -135,7 +135,7 @@ class Operator(Policy):
         return operators().get(self.operator_name)
 
     def should_allow(self, *args, resource=None, **kwargs):
-        return self.resolved_operator(resource)
+        return self.resolved_operator(resource, self.configuration)
 
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):

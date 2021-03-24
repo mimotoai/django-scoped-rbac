@@ -163,7 +163,7 @@ class TestPolicyDict:
 
 def test_operator():
     from scoped_rbac.conf import register_operator
-    def example_operator(resource=None):
+    def example_operator(resource, configuration):
         print(resource)
         return resource == True
     register_operator("istrue", example_operator)
