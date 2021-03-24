@@ -84,27 +84,26 @@ class TestJsonPolicy:
     def test_expression(self):
         policy = policy_for(
             "a",
-            json.dumps({
-                "GET": [
-                    {"ThingOne": "content.status == \"ok\""},
-                    "ThingTwo",
-                    "ThingThree",
-                ]
-            })
+            json.dumps(
+                {
+                    "GET": [
+                        {"ThingOne": "content.status == \"ok\""},
+                        "ThingTwo",
+                        "ThingThree",
+                    ]
+                }
+            ),
         )
 
         from dataclasses import dataclass
+
         @dataclass
         class Res:
             id: int
             content: dict
 
             def to_cel(self):
-                return {
-                    "id": self.id,
-                    "content": self.content
-                }
+                return {"id": self.id, "content": self.content}
 
         thingone = Res(1, {"status": "ok"})
-        print(thingone.to_cel())
         assert policy.should_allow(Permission("GET", "ThingOne"), "a", thingone) is True

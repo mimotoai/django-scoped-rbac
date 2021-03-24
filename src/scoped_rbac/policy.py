@@ -125,7 +125,6 @@ class Operator(Policy):
     """
 
     def __init__(self, configuration):
-        print(configuration)
         self.configuration = configuration
         self.operator_name = configuration.get("operator", None)
         self.operator = None
