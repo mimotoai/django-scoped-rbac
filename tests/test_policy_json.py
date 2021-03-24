@@ -80,3 +80,30 @@ class TestJsonPolicy:
         assert policy.should_allow(Permission("DELETE", "ThingTwo"), "b") is False
         assert policy.should_allow(Permission("DELETE", "ThingThree"), "b") is False
         assert policy.should_allow(permission_super_user_only, "b") is False
+
+    def test_expression(self):
+        policy = policy_for(
+            "a",
+            json.dumps(
+                {
+                    "GET": [
+                        {"ThingOne": "content.status == \"ok\""},
+                        "ThingTwo",
+                        "ThingThree",
+                    ]
+                }
+            ),
+        )
+
+        from dataclasses import dataclass
+
+        @dataclass
+        class Res:
+            id: int
+            content: dict
+
+            def to_cel(self):
+                return {"id": self.id, "content": self.content}
+
+        thingone = Res(1, {"status": "ok"})
+        assert policy.should_allow(Permission("GET", "ThingOne"), "a", thingone) is True

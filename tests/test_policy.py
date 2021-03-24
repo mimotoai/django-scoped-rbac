@@ -1,14 +1,10 @@
 from scoped_rbac.policy import (
-    CompoundPolicy,
-    Expression,
-    ExpressionList,
+    Operator,
     Permission,
-    Policy,
     PolicyDict,
     PolicySet,
     POLICY_TRUE,
     POLICY_FALSE,
-    RootPolicy,
 )
 
 
@@ -163,3 +159,14 @@ class TestPolicyDict:
         assert policy_json["three"]["foo"] is True
         assert "resource1" in policy_json["context"]["action"]
         assert "resource2" in policy_json["context"]["action"]
+
+
+def test_operator():
+    from scoped_rbac.conf import register_operator
+    def example_operator(resource, configuration):
+        return resource == True
+    register_operator("istrue", example_operator)
+    operator = Operator({"operator": "istrue"})
+    assert operator.should_allow(resource=False) is False
+    assert operator.should_allow(resource=42) is False
+    assert operator.should_allow(resource=True) is True

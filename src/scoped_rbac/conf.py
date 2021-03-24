@@ -6,9 +6,11 @@ DEFAULTS = {
     "POLICY_FOR_AUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_STAFF": "scoped_rbac.policy.POLICY_FALSE",
     "POLICY_FOR_UNAUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
+    "CEL_FUNCTIONS": None,
+    "OPERATORS": None,
 }
 
-IMPORT_STRINGS = ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_STAFF", ]
+IMPORT_STRINGS = ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_STAFF"]
 
 
 def scoped_rbac_settings():
@@ -67,3 +69,42 @@ def policy_for_staff():
        }
     """
     return import_policy_or_func("POLICY_FOR_STAFF")
+
+
+REGISTERED_CEL_FUNCTIONS = {}
+RETRIEVED_CONFIGURED_CEL_FUNCTIONS = False
+
+
+def register_cel_function(name, func):
+    global REGISTERED_CEL_FUNCTIONS
+    REGISTERED_CEL_FUNCTIONS[name] = func
+
+
+def cel_functions():
+    global RETRIEVED_CONFIGURED_CEL_FUNCTIONS
+    global REGISTERED_CEL_FUNCTIONS
+    if not RETRIEVED_CONFIGURED_CEL_FUNCTIONS:
+        RETRIEVED_CONFIGURED_CEL_FUNCTIONS = True
+        configured_cel_functions = import_policy_or_func("CEL_FUNCTIONS")
+        if configured_cel_functions is not None:
+            REGISTERED_CEL_FUNCTIONS.extend(configured_cel_functions)
+    return REGISTERED_CEL_FUNCTIONS
+
+
+REGISTERED_OPERATORS = {}
+RETRIEVED_CONFIGURED_OPERATORS = None
+
+
+def register_operator(name, func):
+    global REGISTERED_OPERATORS
+    REGISTERED_OPERATORS[name] = func
+
+def operators():
+    global REGISTERED_OPERATORS
+    global RETRIEVED_CONFIGURED_OPERATORS
+    if not RETRIEVED_CONFIGURED_OPERATORS:
+        RETRIEVED_CONFIGURED_OPERATORS = True
+        configured_operators = import_policy_or_func("OPERATORS")
+        if configured_operators is not None:
+            REGISTERED_OPERATORS.extend(configured_operators)
+    return REGISTERED_OPERATORS
