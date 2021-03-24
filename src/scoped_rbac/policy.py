@@ -390,7 +390,7 @@ def action_policy_from_json(json_policy):
     ActionCondition: { String::ActionName: String::Expr }
     ResourcePolicyList: [ (String::ResourceName | ResourceCondition)+ ]
     ResourcePolicyDict: { (String::ResourceName: (Bool | String::Expr))+ }
-    ResourceCondition: { String::ResourceName: String::Expr }
+    ResourceCondition: { String::ResourceName: String::Expr | OperatorConfig }
     Condition: { 'condition': String::Expr | OperatorConfig }
     OperatorConfig: { 'operator': String::OperatorName, additionalProperties... }
     ```
@@ -499,12 +499,15 @@ def policy_from_resource_policy_dict(policy_dict):
 def policy_from_resource_condition(resource_condition):
     """
     ```
-    ResourceCondition: { String::ResourceName: String::Expr }
+    ResourceCondition: { String::ResourceName: String::Expr | OperatorConfig }
     ```
     """
-    return PolicyDict(
-        {key: Expression(value) for key, value in resource_condition.items()}
-    )
+    if isinstance(resource_condition, str):
+        return PolicyDict(
+            {key: Expression(value) for key, value in resource_condition.items()}
+        )
+    elif isinstance(resource_condition, dict) and "operator" in resource_condition:
+        return Operator(resource_condition)
 
 
 def policy_from_condition(condition):
