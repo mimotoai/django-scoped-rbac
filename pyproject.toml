@@ -5,13 +5,15 @@ target-version = ["py36", "py37", "py38"]
 
 [tool.poetry]
 name = "django-scoped-rbac"
-version = "0.3.1"
+version = "0.4.0"
 description = "A rich and flexible Django application for role-based access control within distinct access control scopes supporting Django Rest Framework."
 authors = ["David Charboneau <david@adadabase.com>"]
 license = "MIT"
 repository = "https://gitlab.com/openteams/django-scoped-rbac"
 packages = [
   { include = "scoped_rbac", from = "src"},
+  { include = "celpy", from = "cel-python/src"},
+  { include = "xlate", from = "cel-python/src"},
 ]
 
 [tool.poetry.dependencies]
@@ -22,7 +24,13 @@ django-rest-framework-condition = "^0.1.0"
 scrudful = "^0.1.0"
 drf-extensions = "^0.6.0"
 django-jsonfield-backport = "^1.0.3"
-cel-python = {git = "https://github.com/openteamsinc/cel-python.git"}
+jmespath = "^0.10.0"
+lark-parser = "^0.8.5"
+python-dateutil = "^2.8.1"
+pyyaml = "^5.3.1"
+requests = "^2.25.0"
+urllib3 = "^1.26.1"
+Babel = "^2.9.0"
 
 [tool.poetry.dev-dependencies]
 astor = { git="https://github.com/Quansight/astor.git", branch="issue-174" }
