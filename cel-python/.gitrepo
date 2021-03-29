@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/openteamsinc/cel-python.git
+	branch = master
+	commit = 78f7d0b2de8a2beb9209a9c9de8ccfdbc0e55180
+	parent = ff37965ba7a48c8b7cbf59d083c89ba269c74464
+	method = merge
+	cmdver = 0.4.3
