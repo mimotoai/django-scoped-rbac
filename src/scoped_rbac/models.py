@@ -23,7 +23,7 @@ class AccessControlledModel(IdentifiedByIRI, models.Model):
     Subclasses **MUST** define a `resource_type: ResourceType` property.
     """
 
-    rbac_context = models.CharField(max_length=2048, default="")
+    rbac_context = models.CharField(max_length=2048, default="", blank=True)
 
     class Meta:
         abstract = True

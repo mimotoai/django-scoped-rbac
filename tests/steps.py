@@ -62,7 +62,7 @@ def multiple_contexts_editor_role():
             "http.PUT": ExampleMultipleContextsModelViewSet.type_iri,
             "http.DELETE": ExampleMultipleContextsModelViewSet.type_iri,
         },
-        "rbac_context": "fixme",
+        "rbac_context": "",
     })
     multiple_contexts_editor_url = role_url
 
@@ -76,7 +76,7 @@ def multiple_contexts_reader_role():
                 f"{ExampleMultipleContextsModelViewSet.type_iri}/list"
             ],
         },
-        "rbac_context": "fixme",
+        "rbac_context": "",
     })
     multiple_contexts_reader_url = role_url
 

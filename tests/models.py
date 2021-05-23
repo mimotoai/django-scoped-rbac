@@ -33,8 +33,8 @@ class ExampleWithMultipleContexts(ScopedRbacTestModel, models.Model):
         "An example model with multiple contexts for test purposes",
     )
 
-    context_1 = models.CharField(max_length=128)
-    context_2 = models.CharField(max_length=128)
+    context_1 = models.CharField(max_length=128, blank=True)
+    context_2 = models.CharField(max_length=128, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
