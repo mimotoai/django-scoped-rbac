@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from tests.rest import ExampleMultipleContextsModelViewSet
 from django.contrib.auth.models import User
 from faker import Faker
 from pprint import pformat
@@ -16,31 +17,68 @@ import pytest
 
 
 role_url = step_data(str)
+multiple_contexts_editor_url = step_data(str)
+multiple_contexts_reader_url = step_data(str)
 
 
 @step
-def create_editor_role(context_url):
-    # Create a role
+def role(role_json):
+    if role_json is None:
+        return
     When.http.post(
-        reverse("role-list"),
-        {
-            "definition": {
-                "http.POST": [Role.resource_type.iri],
-                "http.GET": [Role.resource_type.iri, Role.resource_type.list_iri],
-                "http.PUT": [Role.resource_type.iri],
-                "http.DELETE": [Role.resource_type.iri],
-            },
-            # TODO add these fields
-            # "name": role_name,
-            # "description": role_description,
-            "rbac_context": context_url,
-        },
-        format="json",
+        reverse("role-list"), role_json, format="json",
     )
     logging.info(http_response)
     logging.info(http_response.data)
     Then.http.status_code_is(201)
     role_url = http_response["location"]
+
+
+@step
+def create_editor_role(context_url):
+    role({
+        "definition": {
+            "http.POST": [Role.resource_type.iri],
+            "http.GET": [Role.resource_type.iri, Role.resource_type.list_iri],
+            "http.PUT": [Role.resource_type.iri],
+            "http.DELETE": [Role.resource_type.iri],
+        },
+        # TODO add these fields
+        # "name": role_name,
+        # "description": role_description,
+        "rbac_context": context_url,
+    })
+
+
+@step
+def multiple_contexts_editor_role():
+    role({
+        "definition": {
+            "http.POST": ExampleMultipleContextsModelViewSet.type_iri,
+            "http.GET": [
+                ExampleMultipleContextsModelViewSet.type_iri,
+                f"{ExampleMultipleContextsModelViewSet.type_iri}/list"
+            ],
+            "http.PUT": ExampleMultipleContextsModelViewSet.type_iri,
+            "http.DELETE": ExampleMultipleContextsModelViewSet.type_iri,
+        },
+        "rbac_context": "fixme",
+    })
+    multiple_contexts_editor_url = role_url
+
+
+@step
+def multiple_contexts_reader_role():
+    role({
+        "definition": {
+            "http.GET": [
+                ExampleMultipleContextsModelViewSet.type_iri,
+                f"{ExampleMultipleContextsModelViewSet.type_iri}/list"
+            ],
+        },
+        "rbac_context": "fixme",
+    })
+    multiple_contexts_reader_url = role_url
 
 
 @step

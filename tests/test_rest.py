@@ -1,64 +1,11 @@
-from dataclasses import dataclass
-from django.contrib.auth.models import User
 from faker import Faker
-from rest_framework import status
 from rest_framework.reverse import reverse
-from rest_framework.test import APITestCase
 from safetydance import step_data
 from safetydance_django.test import *
 from safetydance_test import scripted_test, Given, When, Then, And
-from scoped_rbac.models import Role
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
 from .step_extensions import *
-import logging
 import pytest
-
-
-@dataclass
-class TestUser:
-    username: str
-    email: str
-    password: str
-    instance: object
-
-
-def create_user(is_super=False, is_staff=False):
-    fake = Faker()
-    name = fake.pystr(min_chars=10, max_chars=20)
-    email = f"{name}@example.com"
-    passwd = fake.pystr(min_chars=12, max_chars=20)
-    if is_super:
-        user = User.objects.create_superuser(name, email, passwd)
-    else:
-        user = User.objects.create(
-            username=name,
-            email=email,
-            password=passwd,
-            is_active=True,
-            is_staff=is_staff,
-        )
-    user.save()
-    return TestUser(name, email, passwd, user)
-
-
-@pytest.fixture()
-def superuser(transactional_db):
-    return create_user(is_super=True)
-
-
-@pytest.fixture()
-def staff_user(transactional_db):
-    return create_user(is_staff=True)
-
-
-@pytest.fixture()
-def editor_user(transactional_db):
-    return create_user()
-
-
-@pytest.fixture()
-def not_authorized_user(transactional_db):
-    return create_user()
 
 
 @pytest.mark.django_db

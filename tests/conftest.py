@@ -1,3 +1,4 @@
+from .fixtures import superuser, staff_user, editor_user, not_authorized_user 
 import os
 import sys
 

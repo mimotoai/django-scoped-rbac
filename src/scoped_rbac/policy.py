@@ -201,7 +201,7 @@ class PolicySet(Policy):
         self.allowed = set(args)
 
     def should_allow(self, *args, **kwargs):
-        if len(args) is 0:
+        if len(args) == 0:
             return False
         key = args[0]
         return key in self.allowed
@@ -243,7 +243,7 @@ class PolicyDict(Policy):
         self.policies = policy_dict
 
     def should_allow(self, *args, **kwargs):
-        if len(args) is 0:
+        if len(args) == 0:
             return False
         key = args[0]
         policy = self.policies.get(key, POLICY_FALSE)

@@ -63,6 +63,18 @@ class IsAuthorized(permissions.BasePermission):
     Custom permission handling using the `rbac` model.
     """
 
+    def contexts_for(self, obj):
+        contexts = getattr(obj, 'rbac_contexts', None)
+        if contexts is None:
+            return [obj.rbac_context]
+
+
+    def contexts_from(self, view, content):
+        if hasattr(view.serializer_class, "contexts_from"):
+            return view.serializer_class.contexts_from(content)
+        return [content.get("rbac_context", DEFAULT_CONTEXT)]
+
+
     def has_object_permission(self, request, view, obj):
         """
         Requires that the object is `AccessControlled`.
@@ -70,14 +82,14 @@ class IsAuthorized(permissions.BasePermission):
         if not hasattr(view, "resource_type_iri_for"):
             return True
         effective_policy = policy_for(request)
-        permission = policy.Permission(
-                http_action_iri_for(request), obj.resource_type.iri),
-        permitted = effective_policy.should_allow(
-            policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
-            obj.rbac_context,
-            obj,
-        )
-        return permitted
+        contexts = self.contexts_for(obj)
+        for context in contexts:
+            if effective_policy.should_allow(
+                    policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
+                    obj.rbac_context,
+                    obj):
+               return True 
+        return False
 
     def has_permission(self, request, view):
         """
@@ -88,16 +100,18 @@ class IsAuthorized(permissions.BasePermission):
         effective_policy = policy_for(request)
         if request.method in ("PUT", "POST"):
             resource = request.data if request.method in ("PUT", "POST") else None
-            rbac_context = resource.get("rbac_context", DEFAULT_CONTEXT)
+            rbac_contexts = self.contexts_from(view, resource)
         else:
             resource = None
-            rbac_context = SOME_CONTEXT
+            rbac_contexts = [SOME_CONTEXT]
         permission = policy.Permission(
             http_action_iri_for(request), view.resource_type_iri_for(request)
         )
-        permitted = effective_policy.should_allow(
-            permission,
-            rbac_context,
-            resource,
-        )
-        return permitted
+        for context in rbac_contexts:
+            if effective_policy.should_allow(
+                permission,
+                context,
+                resource,
+            ):
+                return True
+        return False
