@@ -3,7 +3,7 @@ from django.db.models import Manager
 from django.db.models.query import QuerySet
 from rest_framework import serializers
 from rest_framework.reverse import reverse
-from .models import ExampleAccessControlledModel
+from .models import ExampleAccessControlledModel, ExampleWithMultipleContexts
 import hashlib
 
 
@@ -146,3 +146,54 @@ class ExampleAccessControlledModelSerializer(
             return hashlib.md5(
                 f"examplerbaccontext-list {datetime.now()}".encode("utf-8")
             ).hexdigest()
+
+
+class ExampleWithMultipleContextsSerializer(
+    EnvelopeItemSerializer, serializers.HyperlinkedModelSerializer
+):
+    class Meta:
+        model = ExampleWithMultipleContexts
+        fields = ("context_1", "context_2")
+        list_serializer_class = EnvelopeCollectionSerializer
+
+    def absolute_url_for(self, item):
+        return reverse("examplewithmutiplecontexts-detail", args=[item.pk])
+
+    @classmethod
+    def etag_for(cls, item=None, *arg, pk=None, **kwarg):
+        if pk is not None:
+            item = ExampleWithMultipleContexts.objects.get(pk=pk)
+        return hashlib.md5(f"{item.context_1} {item.context_2} {item.updated_at}".encode("utf-8")).hexdigest()
+
+    @classmethod
+    def last_modified_for(cls, item=None, *arg, pk=None, **kwarg):
+        if pk is not None:
+            item = ExampleWithMultipleContexts.objects.get(pk=pk)
+        return item.updated_at
+
+    @classmethod
+    def collection_last_modified(cls, request, *args, **kwargs):
+        try:
+            return ExampleWithMultipleContexts.objects.latest().updated_at
+        except ExampleWithMultipleContexts.DoesNotExist:
+            return datetime.now()
+
+    @classmethod
+    def collection_etag(cls, request, *args, **kwargs):
+        try:
+            return hashlib.md5(
+                f"examplewithmutiplecontexts-list {ExampleWithMultipleContexts.objects.latest().updated_at}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+        except ExampleWithMultipleContexts.DoesNotExist:
+            return hashlib.md5(
+                f"examplewithmutiplecontexts-list {datetime.now()}".encode("utf-8")
+            ).hexdigest()
+
+    @classmethod
+    def contexts_from(self, obj):
+        return [
+            obj.get("context_1", ""),
+            obj.get("context_2", ""),
+        ]

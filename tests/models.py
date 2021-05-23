@@ -25,3 +25,20 @@ class ExampleAccessControlledModel(ScopedRbacTestModel, AccessControlledModel):
         "ExampleAccessControlledModel",
         "An example AccessControlledModel for testing and demonstration purposes.",
     )
+
+class ExampleWithMultipleContexts(ScopedRbacTestModel, models.Model):
+    resource_type = ResourceType(
+        "rbac.ExampleWithMultipleContexts",
+        "ExampleWithMultipleContexts",
+        "An example model with multiple contexts for test purposes",
+    )
+
+    context_1 = models.CharField(max_length=128, blank=True)
+    context_2 = models.CharField(max_length=128, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+    @property
+    def rbac_contexts(self):
+        return [self.context_1, self.context_2]
