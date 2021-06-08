@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 # from django.urls import reverse
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
@@ -160,7 +160,7 @@ class UserViewSet(AccessControlledModelViewSet):
 
 
 class UserRbacPolicyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     @property
     def resource_type_iri(self):

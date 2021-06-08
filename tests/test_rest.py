@@ -4,6 +4,7 @@ from safetydance import step_data
 from safetydance_django.test import *
 from safetydance_test import scripted_test, Given, When, Then, And
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
+from .policy import policy_for_unauthenticated
 from .step_extensions import *
 import pytest
 
@@ -190,6 +191,14 @@ def test_get_user_rbac_policy(superuser, editor_user):
             SOME_CONTEXT: role_in_context1_json["definition"],
         }
     )
+
+
+@pytest.mark.django_db
+@scripted_test
+def test_get_unauthenticated_user_policy():
+    When.get_user_rbac_policy()
+    Then.http.status_code_is(200)
+    assert http_response.data is not None
 
 
 @pytest.mark.django_db
