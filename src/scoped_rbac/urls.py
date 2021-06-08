@@ -5,7 +5,6 @@ from . import rest
 router = DefaultRouter()
 router.register(r"role-assignments", rest.RoleAssignmentViewSet)
 router.register(r"roles", rest.RoleViewSet)
-router.register(r"users", rest.UserViewSet)
 
 urlpatterns = router.urls + [
     path(
