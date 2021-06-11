@@ -15,7 +15,7 @@ DEFAULTS = {
 def policy_for_unauthenticated():
     """The default policy for unauthenticated users may be defined via settings. The
     value in settings may be either a Policy instance or a string fully qualified name
-    of a function that returns a Policy instance. For example:
+    of a Policy instance or a function that returns a Policy instance. For example:
 
     .. code-block:: python
 
@@ -24,13 +24,13 @@ def policy_for_unauthenticated():
          ...
        }
     """
-    return import_obj_or_func("POLICY_FOR_UNAUTHENTICATED", default_policies_from)
+    return scoped_rbac_settings().policy_for_unauthenticated
 
 
 def policy_for_authenticated():
     """The base policy for authenticated users may be defined via settings. The value in
-    seetgings may be either a Policy instance or a string fully qualified name of a
-    function that returns a Policy instance. For example:
+    settings may be either a Policy instance or a string fully qualified name of a
+    Policy instance or function that returns a Policy instance. For example:
 
     .. codeblock:: python
 
@@ -39,13 +39,13 @@ def policy_for_authenticated():
          ...
        }
     """
-    return import_obj_or_func("POLICY_FOR_AUTHENTICATED", default_policies_from)
+    return scoped_rbac_settings().policy_for_authenticated
 
 
 def policy_for_staff():
     """The default policy for staff users may be defined via settings. The value in
-    settings may be ether a Policy instance or a string fully qualified name of a
-    function that returns a Policy instance. For example:
+    settings may be either a Policy instance or a string fully qualified name of a
+    Policy instance or a function that returns a Policy instance. For example:
 
     .. code-block:: python
 
@@ -53,99 +53,129 @@ def policy_for_staff():
            "POLICY_FOR_STAFF": "my_app.default_policy_for_staff"
        }
     """
-    return import_obj_or_func("POLICY_FOR_STAFF", default_policies_from)
+    return scoped_rbac_settings().policy_for_staff
 
 
 def cel_functions():
-    global RETRIEVED_CONFIGURED_CEL_FUNCTIONS
-    global REGISTERED_CEL_FUNCTIONS
-    if not RETRIEVED_CONFIGURED_CEL_FUNCTIONS:
-        RETRIEVED_CONFIGURED_CEL_FUNCTIONS = True
-        configured_cel_functions = import_obj_or_func("CEL_FUNCTIONS", dict_imports_from)
-        if configured_cel_functions is not None:
-            REGISTERED_CEL_FUNCTIONS.extend(configured_cel_functions)
-    return REGISTERED_CEL_FUNCTIONS
+    """The registered CEL extension functions for use in CEL policy expressions. The
+    value of the setting may be either a function or the string fully qualified name of
+    a function that will be registered for use in CEL policy expressions. For example:
+
+    .. code-block:: python
+
+       SCOPED_RBAC = {
+           "CEL_FUNCTIONS": {
+               "is_allowed_transition": "myapp.workflow.is_allowed_transition",
+           }
+       }
+    """
+    return scoped_rbac_settings().cel_functions
 
 
 def operators():
-    global REGISTERED_OPERATORS
-    global RETRIEVED_CONFIGURED_OPERATORS
-    if not RETRIEVED_CONFIGURED_OPERATORS:
-        RETRIEVED_CONFIGURED_OPERATORS = True
-        configured_operators = import_obj_or_func("OPERATORS", dict_imports_from)
-        if configured_operators is not None:
-            REGISTERED_OPERATORS.extend(configured_operators)
-    return REGISTERED_OPERATORS
+    """Policy operators to be registered for use as policy conditions. The value of the
+    setting may be either a function that returns the operator or the string fully
+    qualified name of an Operator instance or a function that returns an Operator
+    instance. For example:
+
+    .. code-block:: python
+
+       SCOPED_RBAC = {
+           "OPERATORS": {
+               "is_allowed_transition": "myapp.workflow.allowed_transition_operator",
+           }
+       }
+    """
+    return scoped_rbac_settings().operators
+
+
+class Settings:
+    """Lazy loading and resolution of `scoped_rbac` settings."""
+    def __init__(self, *sources):
+        self._sources = sources
+        self._policy_for_unauthenticated = None
+        self._policy_for_authenticated = None
+        self._policy_for_staff = None
+        self._cel_functions = None
+        self._operators = None
+
+    @property
+    def policy_for_unauthenticated(self):
+        if self._policy_for_unauthenticated is None:
+            self._policy_for_unauthenticated = self.resolve_policy("POLICY_FOR_UNAUTHENTICATED")
+        return self._policy_for_unauthenticated
+
+    @property
+    def policy_for_authenticated(self):
+        if self._policy_for_authenticated is None:
+            self._policy_for_authenticated = self.resolve_policy("POLICY_FOR_AUTHENTICATED")
+        return self._policy_for_authenticated
+
+    @property
+    def policy_for_staff(self):
+        if self._policy_for_staff is None:
+            self._policy_for_staff = self.resolve_policy("POLICY_FOR_STAFF")
+        return self._policy_for_staff
+
+    @property
+    def cel_functions(self):
+        if self._cel_functions is None:
+            self._cel_functions = self.resolve_dict_setting("CEL_FUNCTIONS")
+            self._cel_functions.update(REGISTERED_CEL_FUNCTIONS)
+        return self._cel_functions
+
+    @property
+    def operators(self):
+        if self._operators is None:
+            self._operators = self.resolve_dict_setting("OPERATORS")
+            self._operators.update((REGISTERED_OPERATORS))
+        return self._operators
+
+    def resolve_policy(self, policy_key):
+        from scoped_rbac.policy import POLICY_FALSE
+        result = POLICY_FALSE
+        for source in self._sources:
+            value = source.get(policy_key, POLICY_FALSE)
+            if isinstance(value, str):
+                value = import_string(value)
+            if callable(value):
+                value = value()
+            result = result.sum_with(value)
+        return result
+
+    def resolve_dict_setting(self, setting_key):
+        result = {}
+        for source in self._sources:
+            value = source.get(setting_key, {})
+            if isinstance(value, str):
+                value = import_string(value)
+            if callable(value):
+                value = value()
+            result.update(value)
+        return result
+
+
+RESOLVED_SETTINGS = None
 
 
 def scoped_rbac_settings():
-    retrieved_settings = getattr(settings, "SCOPED_RBAC", dict())
-    if isinstance(retrieved_settings, list):
-        retrieved_settings = dict_imports_from(settings)
-    return retrieved_settings
+    global RESOLVED_SETTINGS
+    if RESOLVED_SETTINGS is None:
+        retrieved_settings = getattr(settings, "SCOPED_RBAC", dict())
+        if isinstance(retrieved_settings, str):
+            retrieved_settings = import_string(retrieved_settings)
+        if callable(retrieved_settings):
+            retrieved_settings = retrieved_settings()
 
-
-def import_obj_or_func(setting, list_handler=None):
-    default = DEFAULTS[setting]
-    policy_obj = scoped_rbac_settings().get(setting, default)
-    if isinstance(policy_obj, str):
-        policy_obj = import_from_string(policy_obj, setting)
-        if callable(policy_obj):
-            policy_obj = policy_obj()
-    elif isinstance(policy_obj, list) and list_handler is not None:
-            policy_obj = list_handler(policy_obj)
-    return policy_obj
-
-
-def default_policies_from(*policies_to_import):
-    """From a list of configuration dictionaries defined in referenced applications,
-    construct a total configuration dictionary for all `SCOPED_RBAC` defaults.
-    
-    Here's an example of configuring `SCOPED_RBAC` in a Django settings module:
-    .. codeblock:: python3
-       
-       SCOPED_RBAC = default_policies_from(
-           "my_django_app.RBAC_DEFAULTS",
-           "my_django_app.apps.app1.RBAC_DEFAULTS",
-           "my_django_app.apps.app2.RBAC_DEFAULTS",
-       )
-    """
-    total_policies = {
-        "POLICY_FOR_UNAUTHENTICATED": None,
-        "POLICY_FOR_AUTHENTICATED": None,
-        "POLICY_FOR_STAFF": None,
-    }
-    for policy_to_import in policies_to_import:
-        default_policy = import_string(policy_to_import)
-        if callable(default_policy):
-            default_policy = default_policy()
-        for policy_name in ["POLICY_FOR_UNAUTHENTICATED", "POLICY_FOR_AUTHENTICATED", "POLICY_FOR_STAFF"]:
-            additional_policy = default_policy.get(policy_name, None)
-            if isinstance(additional_policy, str):
-                additional_policy = import_string(additional_policy)
-            if callable(additional_policy):
-                additional_policy = additional_policy()
-            current_policy = total_policies[policy_name]
-            if current_policy is None:
-                total_policies[policy_name] = additional_policy
-            else:
-                total_policies[policy_name] = current_policy.sum_with(additional_policy)
-    return total_policies
-
-
-def dict_imports_from(*dicts_to_import):
-    total = {}
-    for dict_to_import in dicts_to_import:
-        if isinstance(dict_to_import, str):
-            dict_to_import = import_string(dict_to_import)
-        if callable(dict_to_import):
-            dict_to_import = dict_to_import()
-        total.extend(dict_to_import)
-    return total
+        if isinstance(retrieved_settings, list):
+            retrieved_settings = [import_string(source) for source in retrieved_settings]
+        else:
+            retrieved_settings = [retrieved_settings]
+        RESOLVED_SETTINGS = Settings(*retrieved_settings)
+    return RESOLVED_SETTINGS
 
 
 REGISTERED_CEL_FUNCTIONS = {}
-RETRIEVED_CONFIGURED_CEL_FUNCTIONS = False
 
 
 def register_cel_function(name, func):
@@ -154,7 +184,6 @@ def register_cel_function(name, func):
 
 
 REGISTERED_OPERATORS = {}
-RETRIEVED_CONFIGURED_OPERATORS = None
 
 
 def register_operator(name, func):
