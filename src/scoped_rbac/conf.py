@@ -123,7 +123,7 @@ def default_policies_from(*policies_to_import):
             additional_policy = default_policy.get(policy_name, None)
             if isinstance(additional_policy, str):
                 additional_policy = import_string(additional_policy)
-            if isinstance(additional_policy, callable):
+            if callable(additional_policy):
                 additional_policy = additional_policy()
             current_policy = total_policies[policy_name]
             if current_policy is None:
@@ -138,7 +138,7 @@ def dict_imports_from(*dicts_to_import):
     for dict_to_import in dicts_to_import:
         if isinstance(dict_to_import, str):
             dict_to_import = import_string(dict_to_import)
-        if isinstance(dict_to_import, callable):
+        if callable(dict_to_import):
             dict_to_import = dict_to_import()
         total.extend(dict_to_import)
     return total
