@@ -79,7 +79,10 @@ def operators():
 
 
 def scoped_rbac_settings():
-    return getattr(settings, "SCOPED_RBAC", dict())
+    retrieved_settings = getattr(settings, "SCOPED_RBAC", dict())
+    if isinstance(retrieved_settings, list):
+        retrieved_settings = dict_imports_from(settings)
+    return retrieved_settings
 
 
 def import_obj_or_func(setting, list_handler=None):
