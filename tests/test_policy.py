@@ -162,10 +162,7 @@ class TestPolicyDict:
 
 
 def test_operator():
-    from scoped_rbac.conf import register_operator
-    def example_operator(resource, configuration):
-        return resource == True
-    register_operator("istrue", example_operator)
+    # refer to conftest.py for registration of the istrue operator
     operator = Operator({"operator": "istrue"})
     assert operator.should_allow(resource=False) is False
     assert operator.should_allow(resource=42) is False

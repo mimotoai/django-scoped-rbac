@@ -69,6 +69,9 @@ def pytest_configure(config):
         SCOPED_RBAC={
             "POLICY_FOR_UNAUTHENTICATED": "tests.policy.policy_for_unauthenticated",
             "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
+            "OPERATORS": {
+                "istrue": lambda resource, configuration: resource == True,
+            }
         },
     )
 
