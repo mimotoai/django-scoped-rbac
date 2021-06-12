@@ -91,8 +91,9 @@ def operators():
 
 class Settings:
     """Lazy loading and resolution of `scoped_rbac` settings."""
-    def __init__(self, *sources):
+    def __init__(self, sources):
         self._sources = sources
+        self._resolved_sources = None
         self._policy_for_unauthenticated = None
         self._policy_for_authenticated = None
         self._policy_for_staff = None
@@ -131,21 +132,41 @@ class Settings:
             self._operators.update((REGISTERED_OPERATORS))
         return self._operators
 
+    @property
+    def sources(self):
+        if self._resolved_sources is None:
+            self._resolved_sources = [self.resolve_source(source) for source in self._sources]
+        return self._resolved_sources
+
+    def resolve_source(self, source):
+        if isinstance(source, str):
+            source = import_string(source)
+        if callable(source):
+            source = source()
+        return source
+
     def resolve_policy(self, policy_key):
-        from scoped_rbac.policy import POLICY_FALSE
+        from scoped_rbac.policy import POLICY_FALSE, Policy, policy_from_json, RootPolicy
         result = POLICY_FALSE
-        for source in self._sources:
+        for source in self.sources:
             value = source.get(policy_key, POLICY_FALSE)
             if isinstance(value, str):
                 value = import_string(value)
             if callable(value):
                 value = value()
-            result = result.sum_with(value)
+            if not isinstance(value, Policy):
+                value = policy_from_json(value)
+
+            if isinstance(value, RootPolicy):
+                breakpoint()
+                result = result.sum_with(value.policy)
+            else:
+                result = result.sum_with(value)
         return result
 
     def resolve_dict_setting(self, setting_key):
         result = {}
-        for source in self._sources:
+        for source in self.sources:
             value = source.get(setting_key, {})
             if isinstance(value, str):
                 value = import_string(value)
@@ -162,17 +183,24 @@ def scoped_rbac_settings():
     global RESOLVED_SETTINGS
     if RESOLVED_SETTINGS is None:
         retrieved_settings = getattr(settings, "SCOPED_RBAC", dict())
-        if isinstance(retrieved_settings, str):
-            retrieved_settings = import_string(retrieved_settings)
-        if callable(retrieved_settings):
-            retrieved_settings = retrieved_settings()
-
-        if isinstance(retrieved_settings, list):
-            retrieved_settings = [import_string(source) for source in retrieved_settings]
-        else:
+        retrieved_settings = resolve_scoped_rbac_settings(retrieved_settings)
+        if not isinstance(retrieved_settings, list):
             retrieved_settings = [retrieved_settings]
-        RESOLVED_SETTINGS = Settings(*retrieved_settings)
+        RESOLVED_SETTINGS = Settings(retrieved_settings)
     return RESOLVED_SETTINGS
+
+
+def resolve_scoped_rbac_settings(retrieved_settings):
+    if isinstance(retrieved_settings, str):
+        retrieved_settings = import_string(retrieved_settings)
+    if callable(retrieved_settings):
+        retrieved_settings = retrieved_settings()
+
+    if isinstance(retrieved_settings, list):
+        retrieved_settings = [import_string(source) for source in retrieved_settings]
+    else:
+        retrieved_settings = [retrieved_settings]
+    return retrieved_settings
 
 
 REGISTERED_CEL_FUNCTIONS = {}
