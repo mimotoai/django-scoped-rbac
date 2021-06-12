@@ -271,3 +271,49 @@ def test_staff_user(superuser, staff_user):
 
     When.http.delete(resource_instance_url)
     Then.http.status_code_is(403)
+
+
+@pytest.mark.django_db
+@scripted_test
+def test_put_permissions(superuser, editor_user):
+    context1_name = fake.pystr(min_chars=10, max_chars=20)
+    context2_name = fake.pystr(min_chars=10, max_chars=20)
+
+    Given.http.force_authenticate(user=superuser.instance)
+    And.create_editor_role(context1_name)
+    role_in_context1_url = role_url
+    And.create_editor_role(context2_name)
+    role_in_context2_url = role_url
+
+    Given.assign_role(role_in_context1_url, editor_user, context1_name)
+    And.http.force_authenticate(user=editor_user.instance)
+    And.http.get(role_in_context1_url)
+    role_content = http_response.json()
+    role_content["rbac_context"] = context2_name
+    When.put_safe(role_in_context1_url, role_content, format="json")
+    # Should be forbidden since the user isn't authorized to put in the target
+    # rbac_context
+    Then.http.status_code_is(403)
+
+    Given.http.force_authenticate(user=superuser.instance)
+    And.http.get(role_in_context2_url)
+    etag = http_response["etag"]
+    last_modified = http_response["last-modified"]
+    And.http.force_authenticate(user=editor_user.instance)
+    role_content["rbac_context"] = context1_name
+    When.http.put(role_in_context2_url, role_content,
+        HTTP_IF_MATCH=etag, HTTP_IF_UNMODIFIED_SINCE=last_modified, format="json")
+    # Should be forbidden since the user isn't authorized to put in the
+    # rbac_context for the resource state current in the server
+    Then.http.status_code_is(403)
+
+    Given.http.force_authenticate(user=superuser.instance)
+    And.assign_role(role_in_context2_url, editor_user, context2_name)
+    And.http.force_authenticate(user=editor_user.instance)
+    role_content["rbac_context"] = context1_name
+    When.http.put(role_in_context2_url, role_content,
+        HTTP_IF_MATCH=etag, HTTP_IF_UNMODIFIED_SINCE=last_modified, format="json")
+    # Should be allowed since the user is authorized to put in the rbac_context for the
+    # resource state current in the server and for the target context
+    Then.http.status_code_is(200)
+
