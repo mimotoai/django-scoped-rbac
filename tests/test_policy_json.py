@@ -1,3 +1,4 @@
+import celpy
 import json
 from scoped_rbac.policy import Permission, PolicyDict, RootPolicy, policy_from_json
 
@@ -96,14 +97,13 @@ class TestJsonPolicy:
         )
 
         from dataclasses import dataclass
-
         @dataclass
         class Res:
             id: int
             content: dict
 
             def to_cel(self):
-                return {"id": self.id, "content": self.content}
+                return celpy.json_to_cel({"id": self.id, "content": self.content})
 
         thingone = Res(1, {"status": "ok"})
         assert policy.should_allow(Permission("GET", "ThingOne"), "a", thingone) is True

@@ -2,7 +2,7 @@
 RBAC Policies, with stubbed-out support for conditional expressions.
 """
 
-from celpy.celtypes import BoolType
+from celpy import celtypes
 from collections import namedtuple
 from .conf import cel_functions, operators
 import celpy
@@ -88,11 +88,8 @@ class Expression(Policy):
     def should_allow(self, *args, resource=None, **kwargs):
         """Expects `resource` to support dictionary access or have a `to_cel()` method"""
         if hasattr(resource, "to_cel"):
-            return self.compiled_expression.evaluate(resource.to_cel()) == BoolType(
-                True
-            )
-        else:
-            return self.compiled_expression.evaluate(resource) == BoolType(True)
+            resource = resource.to_cel()
+        return self.compiled_expression.evaluate(resource) == celtypes.BoolType(True)
 
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):

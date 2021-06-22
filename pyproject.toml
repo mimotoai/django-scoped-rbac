@@ -25,12 +25,12 @@ scrudful = "^0.1.0"
 drf-extensions = "^0.6.0"
 django-jsonfield-backport = "^1.0.3"
 jmespath = "^0.10.0"
-lark-parser = "^0.8.5"
 python-dateutil = "^2.8.1"
 pyyaml = "^5.3.1"
 requests = "^2.25.0"
 urllib3 = "^1.26.1"
 Babel = "^2.9.0"
+cel-python = "^0.1.4"
 
 [tool.poetry.dev-dependencies]
 astor = { git="https://github.com/Quansight/astor.git", branch="issue-174" }
