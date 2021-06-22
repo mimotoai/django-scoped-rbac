@@ -12,8 +12,6 @@ license = "MIT"
 repository = "https://gitlab.com/openteams/django-scoped-rbac"
 packages = [
   { include = "scoped_rbac", from = "src"},
-  { include = "celpy", from = "cel-python/src"},
-  { include = "xlate", from = "cel-python/src"},
 ]
 
 [tool.poetry.dependencies]
