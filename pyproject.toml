@@ -1,6 +1,6 @@
 [project]
 name = "django-scoped-rbac"
-version = "0.8.0"
+version = "0.8.1"
 description = "A rich and flexible Django application for role-based access control within distinct access control scopes supporting Django Rest Framework."
 readme = "README.rst"
 authors = [{ name = "David Charboneau", email = "david@adadabase.com" }]
