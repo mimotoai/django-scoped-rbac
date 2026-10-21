@@ -1,4 +1,7 @@
+import copy
+
 from django.contrib.auth import get_user_model
+from django.core.exceptions import FieldDoesNotExist
 from django.shortcuts import get_object_or_404
 
 # from django.urls import reverse
@@ -92,6 +95,56 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
     def update(self, request, *args, **kwargs):
         # TODO authorize
         return super().update(request, *args, **kwargs)
+
+    def check_destination_permissions(self, request, candidate):
+        """
+        Check that the request may save `candidate`, the object as it will be after
+        the update. Like `check_object_permissions`, but only consults permission
+        classes that define `has_destination_permission`.
+        """
+        for permission in self.get_permissions():
+            has_destination_permission = getattr(
+                permission, "has_destination_permission", None
+            )
+            if has_destination_permission is None:
+                continue
+            if not has_destination_permission(request, self, candidate):
+                self.permission_denied(
+                    request,
+                    message=getattr(permission, "message", None),
+                    code=getattr(permission, "code", None),
+                )
+
+    def perform_update(self, serializer):
+        """
+        Authorize the update against the object as it will be saved (e.g. its new
+        `rbac_context`) before saving it.
+        """
+        candidate = self.update_candidate(serializer)
+        self.check_destination_permissions(self.request, candidate)
+        super().perform_update(serializer)
+
+    @staticmethod
+    def update_candidate(serializer):
+        """
+        Return an unsaved copy of `serializer.instance` with the serializer's
+        validated data applied, skipping many-to-many and reverse relations.
+        """
+        instance = serializer.instance
+        candidate = copy.copy(instance)
+        for attr, value in serializer.validated_data.items():
+            try:
+                field = instance._meta.get_field(attr)
+            except FieldDoesNotExist:
+                field = None
+            if field is not None and (
+                field.many_to_many
+                or field.one_to_many
+                or (field.auto_created and not field.concrete)
+            ):
+                continue
+            setattr(candidate, attr, value)
+        return candidate
 
     def delete(self, request, *args, **kwargs):
         # TODO authorize

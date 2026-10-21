@@ -4,6 +4,19 @@ scoped_rbac Change Log
 
 .. current developments
 
+Unreleased
+====================
+
+**Fixed:**
+
+* Security: updates (``PUT`` and ``PATCH``) through ``AccessControlledModelViewSet``
+  are now authorized against the object as it will be saved. An update that changes
+  an object's ``rbac_context`` now requires the permission in the destination context
+  as well as the current one. Previously a ``PATCH`` could move an object, such as a
+  ``RoleAssignment``, into a context where the user had no permission (#1). New hooks:
+  ``IsAuthorized.has_destination_permission`` and
+  ``AccessControlledModelViewSet.check_destination_permissions``.
+
 v0.8.1
 ====================
 

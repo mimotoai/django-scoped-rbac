@@ -90,6 +90,26 @@ class IsAuthorized(permissions.BasePermission):
                 return True
         return False
 
+    def has_destination_permission(self, request, view, candidate):
+        """
+        Authorize an update against `candidate`, the object as it will be saved.
+
+        Allowed if the request's action on the view's resource type is permitted in
+        at least one of the candidate's contexts, so moving an object into a context
+        requires permission there.
+        """
+        if not hasattr(view, "resource_type_iri_for"):
+            return True
+        effective_policy = policy_for(request)
+        contexts = getattr(candidate, "rbac_contexts", None) or [candidate.rbac_context]
+        permission = policy.Permission(
+            http_action_iri_for(request), view.resource_type_iri_for(request)
+        )
+        return any(
+            effective_policy.should_allow(permission, context, candidate)
+            for context in contexts
+        )
+
     def has_permission(self, request, view):
         """
         Requires the view to be an `AccessControlledAPIView`.
