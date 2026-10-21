@@ -13,7 +13,8 @@ On every push to the default branch that changes `src/**`, the `publish` job in
 `.gitlab-ci.yml`:
 
 1. runs `uv version --bump patch`,
-2. `uv build` and `uv publish` (token from the `POETRY_PYPI_ACCESS_TOKEN` CI variable),
+2. `uv build` and `uv publish` (token from the protected, masked `UV_PUBLISH_TOKEN`
+   CI/CD variable, which uv reads directly),
 3. commits `pyproject.toml` + `uv.lock` as `[ci skip] updated to X.Y.Z` and pushes.
 
 So a merge that touches `src/` *is* a patch release.
