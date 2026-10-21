@@ -17,6 +17,12 @@ router.register(
 router.register(
     r"example-with-multiple-contexts", rest.ExampleMultipleContextsModelViewSet
 )
+router.register(
+    r"example-derived-context-models", rest.ExampleDerivedContextModelViewSet
+)
+router.register(
+    r"example-tagged-contexts-models", rest.ExampleTaggedContextsModelViewSet
+)
 
 # router.registry.extend(scoped_rbac.urls.router.registry)
 schema_view = get_schema_view("Test Scoped RBAC API")

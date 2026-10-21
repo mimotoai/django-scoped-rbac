@@ -10,12 +10,26 @@ Unreleased
 **Fixed:**
 
 * Security: updates (``PUT`` and ``PATCH``) through ``AccessControlledModelViewSet``
-  are now authorized against the object as it will be saved. An update that changes
-  an object's ``rbac_context`` now requires the permission in the destination context
-  as well as the current one. Previously a ``PATCH`` could move an object, such as a
-  ``RoleAssignment``, into a context where the user had no permission (#1). New hooks:
-  ``IsAuthorized.has_destination_permission`` and
-  ``AccessControlledModelViewSet.check_destination_permissions``.
+  are now authorized against the object as it was saved, including changes made by
+  ``save()``, ``Serializer.update()``, signals and many-to-many fields. An update
+  that changes an object's ``rbac_context`` (or ``rbac_contexts``) now requires the
+  permission in a destination context as well as in the current one; for an object
+  with several contexts, permission in any one of them suffices. A denied update is
+  rolled back. Previously a ``PATCH`` could move an object, such as a
+  ``RoleAssignment``, into a context where the user had no permission (#1).
+* The user's grants are computed once per request (``policy_for`` caches them on
+  the request), so an update to the user's own ``RoleAssignment`` cannot grant the
+  permission that authorizes it.
+* Creating or updating an object in the reserved ``__SOME_CONTEXT__`` context is
+  rejected with 400 and rolled back.
+* ``IsAuthorized`` now checks objects with multiple ``rbac_contexts`` against each
+  of their contexts instead of failing; an object with no contexts is denied.
+* ``PATCH`` on ``RoleViewSet`` no longer raises ``TypeError``.
+
+**Note:** subclasses of ``AccessControlledModelViewSet`` that override
+``perform_update`` or ``perform_create`` must call ``super()``, or these checks are
+skipped. Side effects outside the database, such as signal handlers sending email,
+may run before a denied update is rolled back.
 
 v0.8.1
 ====================

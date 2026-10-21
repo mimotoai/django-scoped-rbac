@@ -1,11 +1,10 @@
-import copy
-
 from django.contrib.auth import get_user_model
-from django.core.exceptions import FieldDoesNotExist
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 # from django.urls import reverse
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -16,7 +15,8 @@ from scrudful.rest_framework import scrudful_viewset
 
 from .filters import RbacFilter
 from .models import Role, RoleAssignment, UserResourceType
-from .permissions import policy_for
+from .permissions import contexts_for, policy_for
+from .rbac_contexts import SOME_CONTEXT
 from .serializers import RoleAssignmentSerializer, RoleSerializer, UserSerializer
 
 
@@ -96,55 +96,56 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         # TODO authorize
         return super().update(request, *args, **kwargs)
 
-    def check_destination_permissions(self, request, candidate):
+    def perform_create(self, serializer):
         """
-        Check that the request may save `candidate`, the object as it will be after
-        the update. Like `check_object_permissions`, but only consults permission
-        classes that define `has_destination_permission`.
+        Save the new object, rejecting it (and rolling the save back) if it was saved
+        in the reserved `SOME_CONTEXT`.
+
+        Subclasses overriding `perform_create` **MUST** call `super()`.
         """
-        for permission in self.get_permissions():
-            has_destination_permission = getattr(
-                permission, "has_destination_permission", None
-            )
-            if has_destination_permission is None:
-                continue
-            if not has_destination_permission(request, self, candidate):
-                self.permission_denied(
-                    request,
-                    message=getattr(permission, "message", None),
-                    code=getattr(permission, "code", None),
-                )
+        with transaction.atomic():
+            super().perform_create(serializer)
+            instance = serializer.instance
+            instance.refresh_from_db()
+            self.check_not_reserved_context(instance)
 
     def perform_update(self, serializer):
         """
-        Authorize the update against the object as it will be saved (e.g. its new
-        `rbac_context`) before saving it.
-        """
-        candidate = self.update_candidate(serializer)
-        self.check_destination_permissions(self.request, candidate)
-        super().perform_update(serializer)
+        Save the update, then authorize it against the object as persisted, i.e.
+        after `save()`, custom `Serializer.update()` logic, signals and
+        many-to-many changes. A denial (403) or a reserved context (400) rolls the
+        save back, so moving an object into another context requires permission
+        there as well as in its current context (which `get_object()` checked).
 
-    @staticmethod
-    def update_candidate(serializer):
+        Subclasses overriding `perform_update` **MUST** call `super()`, or updates
+        are only authorized against the object's state before the update. Side
+        effects outside the database (e.g. signal handlers sending email) may run
+        before a denial rolls the save back.
         """
-        Return an unsaved copy of `serializer.instance` with the serializer's
-        validated data applied, skipping many-to-many and reverse relations.
+        # Snapshot the user's grants before saving: the update may change their own
+        # RoleAssignments, and the check below must not see grants it created.
+        policy_for(self.request)
+        with transaction.atomic():
+            super().perform_update(serializer)
+            instance = serializer.instance
+            instance.refresh_from_db()
+            self.check_object_permissions(self.request, instance)
+            self.check_not_reserved_context(instance)
+
+    def check_not_reserved_context(self, instance):
         """
-        instance = serializer.instance
-        candidate = copy.copy(instance)
-        for attr, value in serializer.validated_data.items():
-            try:
-                field = instance._meta.get_field(attr)
-            except FieldDoesNotExist:
-                field = None
-            if field is not None and (
-                field.many_to_many
-                or field.one_to_many
-                or (field.auto_created and not field.concrete)
-            ):
-                continue
-            setattr(candidate, attr, value)
-        return candidate
+        Raise a `ValidationError` if `instance` is in the reserved `SOME_CONTEXT`,
+        under which every user's grants are also registered.
+        """
+        model = type(instance)
+        if not (hasattr(model, "rbac_contexts") or hasattr(model, "rbac_context")):
+            return
+        if SOME_CONTEXT in contexts_for(instance):
+            raise ValidationError(
+                f"{SOME_CONTEXT!r} is a reserved rbac_context and cannot be assigned "
+                "to an object.",
+                code="reserved_rbac_context",
+            )
 
     def delete(self, request, *args, **kwargs):
         # TODO authorize
@@ -158,11 +159,11 @@ class RoleViewSet(AccessControlledModelViewSet):
     """
 
     class Meta:
-        def etag_func(view_instance, request, pk: str):
+        def etag_func(view_instance, request, pk: str, **kwargs):
             instance = get_object_or_404(Role, pk=int(pk))
             return instance.etag
 
-        def last_modified_func(view_instance, request, pk: str):
+        def last_modified_func(view_instance, request, pk: str, **kwargs):
             instance = get_object_or_404(Role, pk=int(pk))
             return instance.modified_at
 
@@ -181,11 +182,11 @@ class RoleAssignmentViewSet(AccessControlledModelViewSet):
     """
 
     class Meta:
-        def etag_func(view_instance, request, pk: str):
+        def etag_func(view_instance, request, pk: str, **kwargs):
             instance = get_object_or_404(RoleAssignment, pk=int(pk))
             return instance.etag
 
-        def last_modified_func(view_instance, request, pk: str):
+        def last_modified_func(view_instance, request, pk: str, **kwargs):
             instance = get_object_or_404(RoleAssignment, pk=int(pk))
             return instance.modified_at
 

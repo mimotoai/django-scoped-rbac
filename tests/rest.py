@@ -11,9 +11,16 @@ from scoped_rbac.permissions import IsAuthorized
 from scoped_rbac.rbac_contexts import DEFAULT_CONTEXT
 from scoped_rbac.rest import AccessControlledModelViewSet, DefaultPageNumberPagination
 
-from .models import ExampleAccessControlledModel, ExampleWithMultipleContexts
+from .models import (
+    ExampleAccessControlledModel,
+    ExampleDerivedContextModel,
+    ExampleTaggedContextsModel,
+    ExampleWithMultipleContexts,
+)
 from .serializers import (
     ExampleAccessControlledModelSerializer,
+    ExampleDerivedContextModelSerializer,
+    ExampleTaggedContextsModelSerializer,
     ExampleWithMultipleContextsSerializer,
 )
 
@@ -128,18 +135,35 @@ class ExampleMultipleContextsModelViewSet(AccessControlledModelViewSet):
         return ret
 
     @condition(
-        last_modified_func=ExampleAccessControlledModelSerializer.last_modified_for,
-        etag_func=ExampleAccessControlledModelSerializer.etag_for,
+        last_modified_func=ExampleWithMultipleContextsSerializer.last_modified_for,
+        etag_func=ExampleWithMultipleContextsSerializer.etag_for,
     )
     def update(self, request, *args, **kwargs):
-        ret = super().update(request, *args, **kwargs)
-        headers["etag"] = serializer.etag()
-        headers["last-modified"] = serializer.last_modified()
-        return ret
+        return super().update(request, *args, **kwargs)
 
     @condition(
-        last_modified_func=ExampleAccessControlledModelSerializer.last_modified_for,
-        etag_func=ExampleAccessControlledModelSerializer.etag_for,
+        last_modified_func=ExampleWithMultipleContextsSerializer.last_modified_for,
+        etag_func=ExampleWithMultipleContextsSerializer.etag_for,
     )
     def destroy(self, request, *args, **kwargs):
-        return super().delete(request, *args, **kwargs)
+        return super().destroy(request, *args, **kwargs)
+
+
+class ExampleDerivedContextModelViewSet(AccessControlledModelViewSet):
+    queryset = ExampleDerivedContextModel.objects.all()
+    serializer_class = ExampleDerivedContextModelSerializer
+    permission_classes = [IsAuthorized]
+
+    @property
+    def resource_type_iri(self):
+        return ExampleDerivedContextModel.resource_type.iri
+
+
+class ExampleTaggedContextsModelViewSet(AccessControlledModelViewSet):
+    queryset = ExampleTaggedContextsModel.objects.all()
+    serializer_class = ExampleTaggedContextsModelSerializer
+    permission_classes = [IsAuthorized]
+
+    @property
+    def resource_type_iri(self):
+        return ExampleTaggedContextsModel.resource_type.iri

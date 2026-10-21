@@ -6,7 +6,12 @@ from django.db.models.query import QuerySet
 from rest_framework import serializers
 from rest_framework.reverse import reverse
 
-from .models import ExampleAccessControlledModel, ExampleWithMultipleContexts
+from .models import (
+    ExampleAccessControlledModel,
+    ExampleDerivedContextModel,
+    ExampleTaggedContextsModel,
+    ExampleWithMultipleContexts,
+)
 
 
 class EnvelopeItemSerializer:
@@ -196,3 +201,16 @@ class ExampleWithMultipleContextsSerializer(
             obj.get("context_1", ""),
             obj.get("context_2", ""),
         ]
+
+
+class ExampleDerivedContextModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleDerivedContextModel
+        fields = ("id", "name", "folder", "rbac_context")
+        read_only_fields = ("rbac_context",)
+
+
+class ExampleTaggedContextsModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleTaggedContextsModel
+        fields = ("id", "tags")
