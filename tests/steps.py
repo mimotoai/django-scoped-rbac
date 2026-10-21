@@ -133,17 +133,17 @@ def get_user_rbac_policy():
 
 @step
 def put_safe(*args, **kwargs):
-    if "etag" in http_response._headers:
+    if http_response.has_header("etag"):
         kwargs["HTTP_IF_MATCH"] = http_response["etag"]
-    if "last-modified" in http_response._headers:
+    if http_response.has_header("last-modified"):
         kwargs["HTTP_IF_UNMODIFIED_SINCE"] = http_response["last-modified"]
     http_response = http_client.put(*args, **kwargs)
 
 
 @step
 def delete_safe(*args, **kwargs):
-    if "etag" in http_response._headers:
+    if http_response.has_header("etag"):
         kwargs["HTTP_IF_MATCH"] = http_response["etag"]
-    if "last-modified" in http_response._headers:
+    if http_response.has_header("last-modified"):
         kwargs["HTTP_IF_UNMODIFIED_SINCE"] = http_response["last-modified"]
     http_response = http_client.delete(*args, **kwargs)

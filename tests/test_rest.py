@@ -38,7 +38,7 @@ def test_create_access_controlled_resource(superuser):
     # raise Exception("just want the trace")
 
 
-fake = step_data(Faker, initializer=Faker)
+fake = step_data(Faker, initializer=lambda context: Faker())
 
 
 @pytest.mark.django_db

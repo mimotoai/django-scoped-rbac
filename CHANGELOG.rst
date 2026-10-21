@@ -4,6 +4,35 @@ scoped_rbac Change Log
 
 .. current developments
 
+Unreleased
+====================
+
+**Changed:**
+
+* Requires Python 3.11+, Django 5.2+ and Django REST Framework 3.15+.
+* Policy condition expressions are evaluated with Google's ``cel-expr-python``
+  runtime instead of a vendored copy of ``cel-python``; the ``celpy`` and ``xlate``
+  modules are no longer distributed.
+* ``CEL_FUNCTIONS`` entries must have type-annotated parameters or be a
+  ``cel.FunctionDecl``. Expressions that fail to evaluate deny access.
+* ``Role.definition`` uses Django's ``models.JSONField``;
+  ``django_jsonfield_backport`` is no longer required in ``INSTALLED_APPS``.
+* ``django-rest-framework-condition`` and ``drf-extensions`` are no longer runtime
+  dependencies.
+* Packaging moved from Poetry to uv.
+
+**Added:**
+
+* ``scoped_rbac.cel`` with ``compile_expression``, ``is_true``,
+  ``new_environment``, ``function_decl`` and ``InvalidExpression`` for evaluating
+  CEL expressions.
+
+**Fixed:**
+
+* Removed a stray ``breakpoint()`` hit when a ``RootPolicy`` was configured as a
+  default policy.
+
+
 v0.0.2
 ====================
 

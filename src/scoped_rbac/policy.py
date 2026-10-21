@@ -6,10 +6,8 @@ import json
 import logging
 from collections import namedtuple
 
-import celpy
-from celpy.celtypes import BoolType
-
-from .conf import cel_functions, operators
+from .cel import compile_expression, is_true
+from .conf import operators
 
 logger = logging.getLogger(__name__)
 
@@ -80,19 +78,14 @@ class Expression(Policy):
     @property
     def compiled_expression(self):
         if self.compiled_expression_ is None:
-            env = celpy.Environment()
-            ast = env.compile(self.expression)
-            self.compiled_expression_ = env.program(ast, functions=cel_functions())
+            self.compiled_expression_ = compile_expression(self.expression)
         return self.compiled_expression_
 
     def should_allow(self, *args, resource=None, **kwargs):
-        """Expects `resource` to support dictionary access or have a `to_cel()` method"""
+        """Expects `resource` to be a mapping or have a `to_cel()` method returning one"""
         if hasattr(resource, "to_cel"):
-            return self.compiled_expression.evaluate(resource.to_cel()) == BoolType(
-                True
-            )
-        else:
-            return self.compiled_expression.evaluate(resource) == BoolType(True)
+            resource = resource.to_cel()
+        return is_true(self.compiled_expression, resource)
 
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):

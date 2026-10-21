@@ -5,6 +5,7 @@
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         =
+SOURCEDIR     = .
 BUILDDIR      = ../build/sphinx/
 AUTODOCDIR    = api
 AUTODOCBUILD  = sphinx-apidoc

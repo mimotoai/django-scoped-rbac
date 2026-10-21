@@ -30,7 +30,7 @@ def policy_for_authenticated():
     settings may be either a Policy instance or a string fully qualified name of a
     Policy instance or function that returns a Policy instance. For example:
 
-    .. codeblock:: python
+    .. code-block:: python
 
        SCOPED_RBAC = {
             "POLICY_FOR_AUTHENTICATED": "my_app.base_policy_for_authenticated",
@@ -57,7 +57,9 @@ def policy_for_staff():
 def cel_functions():
     """The registered CEL extension functions for use in CEL policy expressions. The
     value of the setting may be either a function or the string fully qualified name of
-    a function that will be registered for use in CEL policy expressions. For example:
+    a function that will be registered for use in CEL policy expressions. Functions
+    must have type-annotated parameters or be a ``cel.FunctionDecl``; see
+    :mod:`scoped_rbac.cel`. For example:
 
     .. code-block:: python
 
@@ -68,6 +70,13 @@ def cel_functions():
        }
     """
     return scoped_rbac_settings().cel_functions
+
+
+def cel_environment():
+    """The CEL environment, with :func:`cel_functions` registered, in which policy
+    expressions are compiled.
+    """
+    return scoped_rbac_settings().cel_environment
 
 
 def operators():
@@ -97,6 +106,7 @@ class Settings:
         self._policy_for_authenticated = None
         self._policy_for_staff = None
         self._cel_functions = None
+        self._cel_environment = None
         self._operators = None
 
     @property
@@ -127,6 +137,14 @@ class Settings:
             self._cel_functions = self.resolve_dict_setting("CEL_FUNCTIONS")
             self._cel_functions.update(REGISTERED_CEL_FUNCTIONS)
         return self._cel_functions
+
+    @property
+    def cel_environment(self):
+        if self._cel_environment is None:
+            from scoped_rbac.cel import new_environment
+
+            self._cel_environment = new_environment(self.cel_functions)
+        return self._cel_environment
 
     @property
     def operators(self):
@@ -169,7 +187,6 @@ class Settings:
                 value = policy_from_json(value)
 
             if isinstance(value, RootPolicy):
-                breakpoint()
                 result = result.sum_with(value.policy)
             else:
                 result = result.sum_with(value)
