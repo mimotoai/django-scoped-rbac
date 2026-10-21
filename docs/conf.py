@@ -12,7 +12,9 @@
 #
 import os
 import sys
+
 import django
+
 sys.path.insert(0, os.path.abspath('../src'))
 sys.path.insert(1, os.path.abspath('../examples'))
 os.environ['DJANGO_SETTINGS_MODULE'] = 'scoped_rbac_example.settings'
@@ -38,7 +40,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinxcontrib_django',
     'sphinx_rtd_theme',
-    ]
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

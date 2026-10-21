@@ -1,7 +1,5 @@
 from django.conf import settings
 from django.utils.module_loading import import_string
-from rest_framework.settings import import_from_string
-
 
 DEFAULTS = {
     "POLICY_FOR_AUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
@@ -91,6 +89,7 @@ def operators():
 
 class Settings:
     """Lazy loading and resolution of `scoped_rbac` settings."""
+
     def __init__(self, sources):
         self._sources = sources
         self._resolved_sources = None
@@ -103,13 +102,17 @@ class Settings:
     @property
     def policy_for_unauthenticated(self):
         if self._policy_for_unauthenticated is None:
-            self._policy_for_unauthenticated = self.resolve_policy("POLICY_FOR_UNAUTHENTICATED")
+            self._policy_for_unauthenticated = self.resolve_policy(
+                "POLICY_FOR_UNAUTHENTICATED"
+            )
         return self._policy_for_unauthenticated
 
     @property
     def policy_for_authenticated(self):
         if self._policy_for_authenticated is None:
-            self._policy_for_authenticated = self.resolve_policy("POLICY_FOR_AUTHENTICATED")
+            self._policy_for_authenticated = self.resolve_policy(
+                "POLICY_FOR_AUTHENTICATED"
+            )
         return self._policy_for_authenticated
 
     @property
@@ -129,13 +132,15 @@ class Settings:
     def operators(self):
         if self._operators is None:
             self._operators = self.resolve_dict_setting("OPERATORS")
-            self._operators.update((REGISTERED_OPERATORS))
+            self._operators.update(REGISTERED_OPERATORS)
         return self._operators
 
     @property
     def sources(self):
         if self._resolved_sources is None:
-            self._resolved_sources = [self.resolve_source(source) for source in self._sources]
+            self._resolved_sources = [
+                self.resolve_source(source) for source in self._sources
+            ]
         return self._resolved_sources
 
     def resolve_source(self, source):
@@ -146,7 +151,13 @@ class Settings:
         return source
 
     def resolve_policy(self, policy_key):
-        from scoped_rbac.policy import POLICY_FALSE, Policy, policy_from_json, RootPolicy
+        from scoped_rbac.policy import (
+            POLICY_FALSE,
+            Policy,
+            RootPolicy,
+            policy_from_json,
+        )
+
         result = POLICY_FALSE
         for source in self.sources:
             value = source.get(policy_key, POLICY_FALSE)

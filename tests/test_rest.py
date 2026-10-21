@@ -1,12 +1,14 @@
+import pytest
 from faker import Faker
 from rest_framework.reverse import reverse
 from safetydance import step_data
 from safetydance_django.test import *
-from safetydance_test import scripted_test, Given, When, Then, And
+from safetydance_test import And, Given, Then, When, scripted_test
+
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
+
 from .policy import policy_for_unauthenticated
 from .step_extensions import *
-import pytest
 
 
 @pytest.mark.django_db
@@ -301,8 +303,13 @@ def test_put_permissions(superuser, editor_user):
     last_modified = http_response["last-modified"]
     And.http.force_authenticate(user=editor_user.instance)
     role_content["rbac_context"] = context1_name
-    When.http.put(role_in_context2_url, role_content,
-        HTTP_IF_MATCH=etag, HTTP_IF_UNMODIFIED_SINCE=last_modified, format="json")
+    When.http.put(
+        role_in_context2_url,
+        role_content,
+        HTTP_IF_MATCH=etag,
+        HTTP_IF_UNMODIFIED_SINCE=last_modified,
+        format="json",
+    )
     # Should be forbidden since the user isn't authorized to put in the
     # rbac_context for the resource state current in the server
     Then.http.status_code_is(403)
@@ -311,9 +318,13 @@ def test_put_permissions(superuser, editor_user):
     And.assign_role(role_in_context2_url, editor_user, context2_name)
     And.http.force_authenticate(user=editor_user.instance)
     role_content["rbac_context"] = context1_name
-    When.http.put(role_in_context2_url, role_content,
-        HTTP_IF_MATCH=etag, HTTP_IF_UNMODIFIED_SINCE=last_modified, format="json")
+    When.http.put(
+        role_in_context2_url,
+        role_content,
+        HTTP_IF_MATCH=etag,
+        HTTP_IF_UNMODIFIED_SINCE=last_modified,
+        format="json",
+    )
     # Should be allowed since the user is authorized to put in the rbac_context for the
     # resource state current in the server and for the target context
     Then.http.status_code_is(200)
-

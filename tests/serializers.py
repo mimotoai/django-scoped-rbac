@@ -1,10 +1,12 @@
+import hashlib
 from datetime import datetime
+
 from django.db.models import Manager
 from django.db.models.query import QuerySet
 from rest_framework import serializers
 from rest_framework.reverse import reverse
+
 from .models import ExampleAccessControlledModel, ExampleWithMultipleContexts
-import hashlib
 
 
 class EnvelopeItemSerializer:
@@ -44,7 +46,7 @@ class EnvelopeItemSerializer:
             else:
                 context_link = ""
 
-            setattr(self, "__link_header__", schema_link + separator + context_link)
+            self.__link_header__ = schema_link + separator + context_link
 
         return self.__link_header__
 
@@ -64,14 +66,12 @@ class EnvelopeItemSerializer:
 
     @classmethod
     def schema_url(self):
-        """Return the JSON Schema URL for the resource serialized by this class.
-        """
+        """Return the JSON Schema URL for the resource serialized by this class."""
         return None
 
     @classmethod
     def ld_context_url(self):
-        """Return the Linked Data Context URL for the resource serialized by this class.
-        """
+        """Return the Linked Data Context URL for the resource serialized by this class."""
         return None
 
 
@@ -104,6 +104,7 @@ class EnvelopeCollectionSerializer(serializers.ListSerializer):
         ret = [self.envelope_for(item) for item in iterable]
         return ret
 
+
 class ExampleAccessControlledModelSerializer(
     EnvelopeItemSerializer, serializers.HyperlinkedModelSerializer
 ):
@@ -119,7 +120,7 @@ class ExampleAccessControlledModelSerializer(
     def etag_for(cls, item=None, *arg, pk=None, **kwarg):
         if pk is not None:
             item = ExampleAccessControlledModel.objects.get(pk=pk)
-        return hashlib.md5(f"{item.name} {item.updated_at}".encode("utf-8")).hexdigest()
+        return hashlib.md5(f"{item.name} {item.updated_at}".encode()).hexdigest()
 
     @classmethod
     def last_modified_for(cls, item=None, *arg, pk=None, **kwarg):
@@ -138,13 +139,11 @@ class ExampleAccessControlledModelSerializer(
     def collection_etag(cls, request, *args, **kwargs):
         try:
             return hashlib.md5(
-                f"examplerbaccontext-list {ExampleAccessControlledModel.objects.latest().updated_at}".encode(
-                    "utf-8"
-                )
+                f"examplerbaccontext-list {ExampleAccessControlledModel.objects.latest().updated_at}".encode()
             ).hexdigest()
         except ExampleAccessControlledModel.DoesNotExist:
             return hashlib.md5(
-                f"examplerbaccontext-list {datetime.now()}".encode("utf-8")
+                f"examplerbaccontext-list {datetime.now()}".encode()
             ).hexdigest()
 
 
@@ -163,7 +162,9 @@ class ExampleWithMultipleContextsSerializer(
     def etag_for(cls, item=None, *arg, pk=None, **kwarg):
         if pk is not None:
             item = ExampleWithMultipleContexts.objects.get(pk=pk)
-        return hashlib.md5(f"{item.context_1} {item.context_2} {item.updated_at}".encode("utf-8")).hexdigest()
+        return hashlib.md5(
+            f"{item.context_1} {item.context_2} {item.updated_at}".encode()
+        ).hexdigest()
 
     @classmethod
     def last_modified_for(cls, item=None, *arg, pk=None, **kwarg):
@@ -182,13 +183,11 @@ class ExampleWithMultipleContextsSerializer(
     def collection_etag(cls, request, *args, **kwargs):
         try:
             return hashlib.md5(
-                f"examplewithmutiplecontexts-list {ExampleWithMultipleContexts.objects.latest().updated_at}".encode(
-                    "utf-8"
-                )
+                f"examplewithmutiplecontexts-list {ExampleWithMultipleContexts.objects.latest().updated_at}".encode()
             ).hexdigest()
         except ExampleWithMultipleContexts.DoesNotExist:
             return hashlib.md5(
-                f"examplewithmutiplecontexts-list {datetime.now()}".encode("utf-8")
+                f"examplewithmutiplecontexts-list {datetime.now()}".encode()
             ).hexdigest()
 
     @classmethod

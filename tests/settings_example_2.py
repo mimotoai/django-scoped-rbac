@@ -6,16 +6,12 @@ DEFAULTS_2_ACTUAL = {
         }
     },
     "POLICY_FOR_STAFF": lambda: {"": {"GET": "DEFAULTS_2_STAFF"}},
-    "CEL_FUNCTIONS": {"func2": lambda x,y: False},
+    "CEL_FUNCTIONS": {"func2": lambda x, y: False},
     "OPERATORS": {"operator2": object()},
-} 
+}
 
 DEFAULTS_2_ACTUAL_CALLABLE = lambda: DEFAULTS_2_ACTUAL
 
 DEFAULTS_2 = "tests.settings_example_2.DEFAULTS_2_ACTUAL_CALLABLE"
 
-STRING_IMPORTED_DEFAULTS_2 = {
-    "": {
-        "GET": ["DEFAULTS_2_UNAUTHENTICATED"]
-    }
-}
+STRING_IMPORTED_DEFAULTS_2 = {"": {"GET": ["DEFAULTS_2_UNAUTHENTICATED"]}}

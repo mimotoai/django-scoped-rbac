@@ -1,6 +1,7 @@
-from .fixtures import superuser, staff_user, editor_user, not_authorized_user 
 import os
 import sys
+
+from .fixtures import editor_user, not_authorized_user, staff_user, superuser
 
 
 def pytest_addoption(parser):
@@ -71,7 +72,7 @@ def pytest_configure(config):
             "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
             "OPERATORS": {
                 "istrue": lambda resource, configuration: resource == True,
-            }
+            },
         },
     )
 

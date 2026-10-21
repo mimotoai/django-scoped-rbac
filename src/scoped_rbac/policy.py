@@ -2,13 +2,14 @@
 RBAC Policies, with stubbed-out support for conditional expressions.
 """
 
-from celpy.celtypes import BoolType
-from collections import namedtuple
-from .conf import cel_functions, operators
-import celpy
 import json
 import logging
+from collections import namedtuple
 
+import celpy
+from celpy.celtypes import BoolType
+
+from .conf import cel_functions, operators
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,7 @@ class Policy:
         raise NotImplementedError()
 
 
-class PolicyBoolean(Policy):
-    ...
+class PolicyBoolean(Policy): ...
 
 
 class PolicyTrue(PolicyBoolean):
@@ -157,7 +157,6 @@ class Operator(Policy):
     @classmethod
     def from_json(cls, json_policy):
         return Expression(json_policy)
-
 
 
 class ExpressionList(Policy):

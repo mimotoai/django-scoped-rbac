@@ -10,10 +10,11 @@ from rest_framework.reverse import reverse
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from scrudful.rest_framework import scrudful_viewset
+
 from .filters import RbacFilter
 from .models import Role, RoleAssignment, UserResourceType
 from .permissions import policy_for
-from .serializers import RoleSerializer, RoleAssignmentSerializer, UserSerializer
+from .serializers import RoleAssignmentSerializer, RoleSerializer, UserSerializer
 
 
 class DefaultPageNumberPagination(PageNumberPagination):

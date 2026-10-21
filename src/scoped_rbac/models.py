@@ -1,11 +1,12 @@
 from django.conf import settings
 from django.db import models
 from django_jsonfield_backport.models import JSONField
+
 from .policy import policy_from_json
 from .registry import ResourceType, register_access_controlled_model
 
 
-class IdentifiedByIRI(object):
+class IdentifiedByIRI:
     """
     A model mixin that has an associated RDF IRI indicating its RDF type.
 

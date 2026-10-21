@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from faker import Faker
+
 import pytest
+from faker import Faker
 
 
 @dataclass

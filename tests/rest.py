@@ -1,19 +1,24 @@
+import logging
+
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework_condition import last_modified, condition
+from rest_framework_condition import condition, last_modified
 from rest_framework_extensions.etag.decorators import etag
-from scoped_rbac.rest import AccessControlledModelViewSet, DefaultPageNumberPagination
+
 from scoped_rbac.permissions import IsAuthorized
 from scoped_rbac.rbac_contexts import DEFAULT_CONTEXT
+from scoped_rbac.rest import AccessControlledModelViewSet, DefaultPageNumberPagination
+
 from .models import ExampleAccessControlledModel, ExampleWithMultipleContexts
-from .serializers import ExampleAccessControlledModelSerializer, ExampleWithMultipleContextsSerializer
-import logging
+from .serializers import (
+    ExampleAccessControlledModelSerializer,
+    ExampleWithMultipleContextsSerializer,
+)
 
 
 class ExampleAccessControlledModelViewSet(AccessControlledModelViewSet):
-
     queryset = ExampleAccessControlledModel.objects.all()
     serializer_class = ExampleAccessControlledModelSerializer
     pagination_class = DefaultPageNumberPagination
@@ -77,7 +82,6 @@ class ExampleAccessControlledModelViewSet(AccessControlledModelViewSet):
 
 
 class ExampleMultipleContextsModelViewSet(AccessControlledModelViewSet):
-
     type_iri = f"{ExampleWithMultipleContexts.resource_type.iri}"
     queryset = ExampleWithMultipleContexts.objects.all()
     serializer_class = ExampleWithMultipleContextsSerializer
