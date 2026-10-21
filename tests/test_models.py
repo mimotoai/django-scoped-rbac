@@ -1,10 +1,11 @@
+import pytest
 from django.contrib.auth.models import User
 from django.test import TestCase
 from faker import Faker
+
 from scoped_rbac.models import Role, RoleAssignment
 from scoped_rbac.registry import RbacRegistry
 from tests.models import ExampleAccessControlledModel
-import pytest
 
 
 class AccessControlledTestCase(TestCase):

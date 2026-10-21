@@ -57,3 +57,8 @@ rever/
 examples/db.sqlite3
 
 .vscode
+.conda*
+
+# uv and Claude Code plugin state
+.uv-cache/
+.remember/

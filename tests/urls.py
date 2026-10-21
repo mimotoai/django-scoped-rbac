@@ -1,8 +1,10 @@
-import scoped_rbac.urls
-from scoped_rbac.rest import UserViewSet
-from django.conf.urls import include, url
+from django.urls import include, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework.schemas import get_schema_view
+
+import scoped_rbac.urls
+from scoped_rbac.rest import UserViewSet
+
 from . import rest
 
 # from . import rest
@@ -20,10 +22,10 @@ router.register(
 schema_view = get_schema_view("Test Scoped RBAC API")
 
 urlpatterns = [
-    url(r"^api/", include(router.urls), name="api"),
-    url(r"^api/scoped-rbac/", include(scoped_rbac.urls), name="scoped-rbac"),
-    url(r"^api/schema", schema_view, name="api-schema"),
-    url(
+    re_path(r"^api/", include(router.urls), name="api"),
+    re_path(r"^api/scoped-rbac/", include(scoped_rbac.urls), name="scoped-rbac"),
+    re_path(r"^api/schema", schema_view, name="api-schema"),
+    re_path(
         r"^api/rest-framework/auth",
         include("rest_framework.urls", namespace="rest_framework"),
     ),

@@ -1,7 +1,5 @@
 from django.conf import settings
 from django.utils.module_loading import import_string
-from rest_framework.settings import import_from_string
-
 
 DEFAULTS = {
     "POLICY_FOR_AUTHENTICATED": "scoped_rbac.policy.POLICY_FALSE",
@@ -32,7 +30,7 @@ def policy_for_authenticated():
     settings may be either a Policy instance or a string fully qualified name of a
     Policy instance or function that returns a Policy instance. For example:
 
-    .. codeblock:: python
+    .. code-block:: python
 
        SCOPED_RBAC = {
             "POLICY_FOR_AUTHENTICATED": "my_app.base_policy_for_authenticated",
@@ -59,7 +57,9 @@ def policy_for_staff():
 def cel_functions():
     """The registered CEL extension functions for use in CEL policy expressions. The
     value of the setting may be either a function or the string fully qualified name of
-    a function that will be registered for use in CEL policy expressions. For example:
+    a function that will be registered for use in CEL policy expressions. Functions
+    must have type-annotated parameters or be a ``cel.FunctionDecl``; see
+    :mod:`scoped_rbac.cel`. For example:
 
     .. code-block:: python
 
@@ -70,6 +70,13 @@ def cel_functions():
        }
     """
     return scoped_rbac_settings().cel_functions
+
+
+def cel_environment():
+    """The CEL environment, with :func:`cel_functions` registered, in which policy
+    expressions are compiled.
+    """
+    return scoped_rbac_settings().cel_environment
 
 
 def operators():
@@ -91,6 +98,7 @@ def operators():
 
 class Settings:
     """Lazy loading and resolution of `scoped_rbac` settings."""
+
     def __init__(self, sources):
         self._sources = sources
         self._resolved_sources = None
@@ -98,18 +106,23 @@ class Settings:
         self._policy_for_authenticated = None
         self._policy_for_staff = None
         self._cel_functions = None
+        self._cel_environment = None
         self._operators = None
 
     @property
     def policy_for_unauthenticated(self):
         if self._policy_for_unauthenticated is None:
-            self._policy_for_unauthenticated = self.resolve_policy("POLICY_FOR_UNAUTHENTICATED")
+            self._policy_for_unauthenticated = self.resolve_policy(
+                "POLICY_FOR_UNAUTHENTICATED"
+            )
         return self._policy_for_unauthenticated
 
     @property
     def policy_for_authenticated(self):
         if self._policy_for_authenticated is None:
-            self._policy_for_authenticated = self.resolve_policy("POLICY_FOR_AUTHENTICATED")
+            self._policy_for_authenticated = self.resolve_policy(
+                "POLICY_FOR_AUTHENTICATED"
+            )
         return self._policy_for_authenticated
 
     @property
@@ -126,16 +139,26 @@ class Settings:
         return self._cel_functions
 
     @property
+    def cel_environment(self):
+        if self._cel_environment is None:
+            from scoped_rbac.cel import new_environment
+
+            self._cel_environment = new_environment(self.cel_functions)
+        return self._cel_environment
+
+    @property
     def operators(self):
         if self._operators is None:
             self._operators = self.resolve_dict_setting("OPERATORS")
-            self._operators.update((REGISTERED_OPERATORS))
+            self._operators.update(REGISTERED_OPERATORS)
         return self._operators
 
     @property
     def sources(self):
         if self._resolved_sources is None:
-            self._resolved_sources = [self.resolve_source(source) for source in self._sources]
+            self._resolved_sources = [
+                self.resolve_source(source) for source in self._sources
+            ]
         return self._resolved_sources
 
     def resolve_source(self, source):
@@ -146,7 +169,13 @@ class Settings:
         return source
 
     def resolve_policy(self, policy_key):
-        from scoped_rbac.policy import POLICY_FALSE, Policy, policy_from_json, RootPolicy
+        from scoped_rbac.policy import (
+            POLICY_FALSE,
+            Policy,
+            RootPolicy,
+            policy_from_json,
+        )
+
         result = POLICY_FALSE
         for source in self.sources:
             value = source.get(policy_key, POLICY_FALSE)
@@ -158,7 +187,6 @@ class Settings:
                 value = policy_from_json(value)
 
             if isinstance(value, RootPolicy):
-                breakpoint()
                 result = result.sum_with(value.policy)
             else:
                 result = result.sum_with(value)

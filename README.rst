@@ -2,8 +2,8 @@
 django_scoped_rbac
 ==================
 
-.. image:: https://github.com/Quansight/django-scoped-rbac/workflows/Django%20CI/badge.svg
-   :target: Django CI
+.. image:: https://gitlab.com/openteams/django-scoped-rbac/badges/master/pipeline.svg
+   :target: https://gitlab.com/openteams/django-scoped-rbac/-/pipelines
 
 A rich and flexible Django application for role-based access control within
 distinct access control scopes supporting Django Rest Framework.
@@ -79,8 +79,56 @@ implementation of the permissions policy engine, can provide a much richer user
 experience.
 
 
-Note
-====
+Installation
+============
 
-This project has been set up using PyScaffold 3.2.3. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+Requires Python 3.11+, Django 5.2+ and Django REST Framework 3.15+.
+
+.. code-block:: shell
+
+   uv add django-scoped-rbac   # or: pip install django-scoped-rbac
+
+Add ``"scoped_rbac"`` to ``INSTALLED_APPS`` and configure policies with the
+``SCOPED_RBAC`` setting.
+
+
+Conditional policy expressions
+==============================
+
+Policy conditions are written in the `Common Expression Language
+<https://cel.dev>`_ and evaluated with Google's `cel-expr-python
+<https://github.com/cel-expr/cel-python>`_ runtime. Each top-level key of the resource
+being authorized is available as a variable, for example ``content.status == "open"``.
+An expression that fails to evaluate denies access.
+
+Custom functions are registered with ``CEL_FUNCTIONS``. Because the CEL runtime
+dispatches on argument types, each function's parameters must be annotated with
+``bool``, ``int``, ``float``, ``str``, ``bytes``, ``dict`` or ``list``; a function that
+needs several signatures can be given as a ``cel_expr_python.cel.FunctionDecl``
+instead:
+
+.. code-block:: python
+
+   # myapp/workflow.py
+   def is_allowed_transition(current: str, proposed: str) -> bool:
+       ...
+
+   # settings.py
+   SCOPED_RBAC = {
+       "CEL_FUNCTIONS": {
+           "is_allowed_transition": "myapp.workflow.is_allowed_transition",
+       },
+   }
+
+
+Development
+===========
+
+The project is managed with `uv <https://docs.astral.sh/uv/>`_:
+
+.. code-block:: shell
+
+   uv sync                              # create .venv with the dev dependencies
+   uv run pytest                        # run the tests with coverage
+   uv run ruff check && uv run ruff format --check
+   uv run --group docs make -C docs html   # build the docs into build/sphinx/html

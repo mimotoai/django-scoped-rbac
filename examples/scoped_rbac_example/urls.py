@@ -1,7 +1,7 @@
 """scoped_rbac_example URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/2.2/topics/http/urls/
+    https://docs.djangoproject.com/en/5.2/topics/http/urls/
 Examples:
 Function views
     1. Add an import:  from my_app import views
@@ -13,13 +13,13 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.conf.urls import include, url
+
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework.schemas import get_schema_view
-import scoped_rbac.urls
 
+import scoped_rbac.urls
 
 router = DefaultRouter()
 router.registry.extend(scoped_rbac.urls.router.registry)
@@ -27,9 +27,9 @@ schema_view = get_schema_view("Example Django Scoped RBAC API")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    url(r"^api/", include(router.urls), name="api"),
-    url(r"^api/schemas", schema_view, name="api-schema"),
-    url(
+    re_path(r"^api/", include(router.urls), name="api"),
+    re_path(r"^api/schemas", schema_view, name="api-schema"),
+    re_path(
         r"^api/rest-framework/auth",
         include("rest_framework.urls", namespace="rest_framework"),
     ),

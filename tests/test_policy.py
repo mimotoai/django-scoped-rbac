@@ -1,12 +1,11 @@
 from scoped_rbac.policy import (
+    POLICY_FALSE,
+    POLICY_TRUE,
     Operator,
     Permission,
     PolicyDict,
     PolicySet,
-    POLICY_TRUE,
-    POLICY_FALSE,
 )
-
 
 permission_one = Permission(action="GET", resource_type="One")
 permission_two = Permission(action="GET", resource_type="Two")

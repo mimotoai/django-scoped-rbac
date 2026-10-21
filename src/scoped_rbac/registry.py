@@ -1,7 +1,5 @@
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import List
-
 
 Action = namedtuple("Action", "iri display_name, description")
 
@@ -43,9 +41,9 @@ def register_access_controlled_model(cls):
     RbacRegistry._ACCESS_CONTROLLED_MODEL_CLASSES.append(cls)
 
 
-def register_resource_types(*args: List[ResourceType]):
+def register_resource_types(*args: list[ResourceType]):
     RbacRegistry.CACHED_RESOURCE_TYPES.extend(args)
 
 
-def register_actions(*actions: List[Action]):
+def register_actions(*actions: list[Action]):
     RbacRegistry.ACTIONS.extend(*actions)

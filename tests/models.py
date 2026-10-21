@@ -1,4 +1,5 @@
 from django.db import models
+
 from scoped_rbac.models import AccessControlledModel
 from scoped_rbac.registry import ResourceType
 
@@ -26,6 +27,7 @@ class ExampleAccessControlledModel(ScopedRbacTestModel, AccessControlledModel):
         "An example AccessControlledModel for testing and demonstration purposes.",
     )
 
+
 class ExampleWithMultipleContexts(ScopedRbacTestModel, models.Model):
     resource_type = ResourceType(
         "rbac.ExampleWithMultipleContexts",
@@ -37,7 +39,6 @@ class ExampleWithMultipleContexts(ScopedRbacTestModel, models.Model):
     context_2 = models.CharField(max_length=128, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
 
     @property
     def rbac_contexts(self):

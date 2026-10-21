@@ -1,9 +1,9 @@
 from rest_framework import permissions
-from .models import RoleAssignment
-from . import policy
-from .rbac_contexts import DEFAULT_CONTEXT, SOME_CONTEXT
-from .conf import policy_for_authenticated, policy_for_staff, policy_for_unauthenticated
 
+from . import policy
+from .conf import policy_for_authenticated, policy_for_staff, policy_for_unauthenticated
+from .models import RoleAssignment
+from .rbac_contexts import DEFAULT_CONTEXT, SOME_CONTEXT
 
 NOT_ALLOWED = policy.RootPolicy().add_policy(policy.POLICY_FALSE)
 ALLOWED = policy.RootPolicy().add_policy(policy.POLICY_TRUE)
@@ -68,12 +68,10 @@ class IsAuthorized(permissions.BasePermission):
         if contexts is None:
             return [obj.rbac_context]
 
-
     def contexts_from(self, view, content):
         if hasattr(view.serializer_class, "contexts_from"):
             return view.serializer_class.contexts_from(content)
         return [content.get("rbac_context", DEFAULT_CONTEXT)]
-
 
     def has_object_permission(self, request, view, obj):
         """
@@ -85,10 +83,11 @@ class IsAuthorized(permissions.BasePermission):
         contexts = self.contexts_for(obj)
         for context in contexts:
             if effective_policy.should_allow(
-                    policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
-                    obj.rbac_context,
-                    obj):
-               return True 
+                policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
+                obj.rbac_context,
+                obj,
+            ):
+                return True
         return False
 
     def has_permission(self, request, view):

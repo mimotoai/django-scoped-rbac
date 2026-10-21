@@ -1,6 +1,7 @@
-from .fixtures import superuser, staff_user, editor_user, not_authorized_user 
 import os
 import sys
+
+from .fixtures import editor_user, not_authorized_user, staff_user, superuser
 
 
 def pytest_addoption(parser):
@@ -25,13 +26,8 @@ def pytest_configure(config):
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",
         USE_I18N=True,
-        USE_L10N=True,
         STATIC_URL="/static/",
         ROOT_URLCONF="tests.urls",
-        TEMPLATE_LOADERS=(
-            "django.template.loaders.filesystem.Loader",
-            "django.template.loaders.app_directories.Loader",
-        ),
         MIDDLEWARE=(
             "django.middleware.common.CommonMiddleware",
             "django.contrib.sessions.middleware.SessionMiddleware",
@@ -47,20 +43,12 @@ def pytest_configure(config):
             "django.contrib.sites",
             "django.contrib.messages",
             "django.contrib.staticfiles",
-            "django_jsonfield_backport",
             "rest_framework",
             "rest_framework.authtoken",
             "scoped_rbac",
             "tests",
         ),
-        PASSWORD_HASHERS=(
-            "django.contrib.auth.hashers.SHA1PasswordHasher",
-            "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-            "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
-            "django.contrib.auth.hashers.BCryptPasswordHasher",
-            "django.contrib.auth.hashers.MD5PasswordHasher",
-            "django.contrib.auth.hashers.CryptPasswordHasher",
-        ),
+        PASSWORD_HASHERS=("django.contrib.auth.hashers.MD5PasswordHasher",),
         REST_FRAMEWORK={
             "DEFAULT_PERMISSION_CLASSES": [
                 "scoped_rbac.permissions.IsAuthorized",
@@ -71,7 +59,7 @@ def pytest_configure(config):
             "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
             "OPERATORS": {
                 "istrue": lambda resource, configuration: resource == True,
-            }
+            },
         },
     )
 
