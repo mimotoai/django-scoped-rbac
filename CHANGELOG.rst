@@ -4,8 +4,11 @@ scoped_rbac Change Log
 
 .. current developments
 
-Unreleased
+v0.8.1
 ====================
+
+Breaking release. The branch carries version 0.8.0; CI's publish job bumps the patch
+version, so 0.8.1 is the first release published with these changes.
 
 **Changed:**
 
