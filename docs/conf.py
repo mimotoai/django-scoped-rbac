@@ -24,7 +24,7 @@ django.setup()
 # -- Project information -----------------------------------------------------
 
 project = "Django Scoped RBAC"
-copyright = "2019, David Charboneau"
+copyright = "2019-2026, David Charboneau"
 author = "David Charboneau"
 
 # The full version, including alpha/beta/rc tags

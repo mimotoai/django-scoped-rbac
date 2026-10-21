@@ -23,6 +23,10 @@ version, so 0.8.1 is the first release published with these changes.
 * ``django-rest-framework-condition`` and ``drf-extensions`` are no longer runtime
   dependencies.
 * Packaging moved from Poetry to uv.
+* Licensed under the MIT License (copyright David Charboneau, with portions
+  copyright OpenTeams). Portions originally developed at Quansight remain under the
+  BSD 3-Clause License with Quansight's copyright notice. Both are in a single
+  ``LICENSE`` file, replacing ``LICENSE`` and ``LICENSE.txt``.
 
 **Added:**
 

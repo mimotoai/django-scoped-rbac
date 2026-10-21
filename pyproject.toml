@@ -4,8 +4,8 @@ version = "0.8.0"
 description = "A rich and flexible Django application for role-based access control within distinct access control scopes supporting Django Rest Framework."
 readme = "README.rst"
 authors = [{ name = "David Charboneau", email = "david@adadabase.com" }]
-license = "MIT"
-license-files = ["LICENSE.txt"]
+license = "MIT AND BSD-3-Clause"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",

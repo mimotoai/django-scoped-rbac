@@ -76,4 +76,3 @@ A PostToolUse hook ruff-formats Python files after each edit.
   `context`. Changing either alters authorization behaviour — confirm intent first.
 - Root `manage.py` points at a nonexistent `scoped_rbac.settings`; use
   `examples/manage.py`.
-- `LICENSE` (BSD-3, Quansight) and `LICENSE.txt` (MIT) disagree; metadata says MIT.
