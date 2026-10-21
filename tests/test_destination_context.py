@@ -7,15 +7,19 @@ from django.db.models.signals import post_save
 from django.utils.http import http_date, quote_etag
 from django.utils.timezone import now
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 from scrudful import __version__ as scrudful_version
 
 from scoped_rbac.models import Role, RoleAssignment
-from scoped_rbac.permissions import IsAuthorized
+from scoped_rbac.permissions import IsAuthorized, policy_for
+from scoped_rbac.policy import Permission
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
 from scoped_rbac.rest import RoleAssignmentViewSet
 
 from .models import (
+    ExampleAccessControlledModel,
+    ExampleCachedContextsModel,
     ExampleContextTag,
     ExampleDerivedContextModel,
     ExampleFolder,
@@ -27,12 +31,16 @@ RA = "rbac.RoleAssignment"
 ROLE = "rbac.Role"
 DERIVED = ExampleDerivedContextModel.resource_type.iri
 TAGGED = ExampleTaggedContextsModel.resource_type.iri
+CACHED = ExampleCachedContextsModel.resource_type.iri
+EXAMPLE = ExampleAccessControlledModel.resource_type.iri
 MULTI = ExampleWithMultipleContexts.resource_type.iri
 RA_URL = "/api/scoped-rbac/role-assignments/{}/"
 RA_LIST_URL = "/api/scoped-rbac/role-assignments/"
 ROLE_URL = "/api/scoped-rbac/roles/{}/"
 DERIVED_URL = "/api/example-derived-context-models/{}/"
 TAGGED_URL = "/api/example-tagged-contexts-models/{}/"
+CACHED_URL = "/api/example-cached-contexts-models/{}/"
+EXAMPLE_URL = "/api/example-access-controlled-models/{}/"
 MULTI_URL = "/api/example-with-multiple-contexts/{}/"
 PERMISSION_DENIED = "You do not have permission to perform this action."
 
@@ -596,3 +604,150 @@ def test_put_role_keeping_context_is_allowed(user):
     assert response.status_code == 200, response.content
     target.refresh_from_db()
     assert target.definition == {"http.GET": [ROLE]}
+
+
+# Reserved-context lookalikes (they could match SOME_CONTEXT under a case- or
+# accent-insensitive collation)
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "__some_context__",
+        "__\uff33OME_CONTEXT__",  # fullwidth S, NFKC-equivalent
+        " __SOME_CONTEXT__ ",
+        "__SOME_CONTEXT__\n",
+    ],
+)
+@pytest.mark.django_db
+def test_patch_into_reserved_context_variant_is_rejected(
+    user, ra_patcher_in_a, variant
+):
+    # A grant in the variant context, so only the reserved-context check can refuse.
+    grant(user, {"http.PATCH": [RA]}, variant)
+
+    response = client_for(user).patch(
+        RA_URL.format(ra_patcher_in_a.pk), {"rbac_context": variant}, format="json"
+    )
+
+    assert_reserved_context_rejected(response)
+    ra_patcher_in_a.refresh_from_db()
+    assert ra_patcher_in_a.rbac_context == "A"
+
+
+# The reserved-context check uses the permission class's (overridable) contexts_for
+
+
+class RoleContextIsAuthorized(IsAuthorized):
+    """Treats a RoleAssignment as living in its role's context."""
+
+    def contexts_for(self, obj):
+        if isinstance(obj, RoleAssignment):
+            return [obj.role.rbac_context]
+        return super().contexts_for(obj)
+
+
+class RoleContextRoleAssignmentViewSet(RoleAssignmentViewSet):
+    permission_classes = [RoleContextIsAuthorized]
+
+
+@pytest.mark.django_db
+def test_reserved_context_check_uses_permission_contexts_for(user, ra_patcher_in_a):
+    reserved_role = make_role({}, SOME_CONTEXT)
+    view = RoleContextRoleAssignmentViewSet.as_view({"patch": "partial_update"})
+    request = APIRequestFactory().patch(
+        RA_URL.format(ra_patcher_in_a.pk),
+        {"role": role_link(reserved_role)},
+        format="json",
+    )
+    force_authenticate(request, user=user)
+
+    response = view(request, pk=str(ra_patcher_in_a.pk)).render()
+
+    assert_reserved_context_rejected(response)
+    ra_patcher_in_a.refresh_from_db()
+    assert ra_patcher_in_a.role_id != reserved_role.pk
+
+
+# rbac_contexts cached on the instance (functools.cached_property)
+
+
+@pytest.mark.django_db
+def test_patch_replacing_cached_property_contexts_is_forbidden(user):
+    grant(user, {"http.PATCH": [CACHED]}, "A")
+    target = ExampleCachedContextsModel.objects.create()
+    tag_a = ExampleContextTag.objects.create(ctx="A")
+    target.tags.set([tag_a])
+    tag_v = ExampleContextTag.objects.create(ctx="V")
+
+    response = client_for(user).patch(
+        CACHED_URL.format(target.pk), {"tags": [tag_v.pk]}, format="json"
+    )
+
+    assert_permission_denied(response)
+    assert list(target.tags.all()) == [tag_a]
+
+
+@pytest.mark.django_db
+def test_patch_keeping_a_granted_cached_property_context_is_allowed(user):
+    grant(user, {"http.PATCH": [CACHED]}, "A")
+    target = ExampleCachedContextsModel.objects.create()
+    tag_a = ExampleContextTag.objects.create(ctx="A")
+    target.tags.set([tag_a])
+    tag_v = ExampleContextTag.objects.create(ctx="V")
+
+    response = client_for(user).patch(
+        CACHED_URL.format(target.pk), {"tags": [tag_a.pk, tag_v.pk]}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    assert sorted(t.ctx for t in target.tags.all()) == ["A", "V"]
+
+
+# policy_for's per-request cache
+
+
+@pytest.mark.django_db
+def test_policy_for_is_cached_per_request_and_user(
+    user, django_user_model, django_assert_num_queries
+):
+    grant(user, {"http.GET": [RA]}, "A")
+    other_user = django_user_model.objects.create(username="no-grants")
+    request = Request(APIRequestFactory().get("/"))
+    get_ra = Permission("http.GET", RA)
+
+    request.user = other_user
+    assert not policy_for(request).should_allow(get_ra, "A", None)
+
+    request.user = user
+    assert policy_for(request).should_allow(get_ra, "A", None)
+    with django_assert_num_queries(0):
+        assert policy_for(request).should_allow(get_ra, "A", None)
+
+
+# The example viewsets in tests/rest.py (issue #30)
+
+
+@pytest.mark.django_db
+def test_authorized_put_on_example_model_is_saved_and_returns_200(user):
+    grant(user, {"http.PUT": [EXAMPLE]}, "A")
+    target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
+
+    response = client_for(user).put(
+        EXAMPLE_URL.format(target.pk), {"name": "y", "rbac_context": "A"}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.name == "y"
+
+
+@pytest.mark.django_db
+def test_authorized_delete_on_example_model_returns_204(user):
+    grant(user, {"http.DELETE": [EXAMPLE]}, "A")
+    target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
+
+    response = client_for(user).delete(EXAMPLE_URL.format(target.pk))
+
+    assert response.status_code == 204, response.content
+    assert not ExampleAccessControlledModel.objects.filter(pk=target.pk).exists()

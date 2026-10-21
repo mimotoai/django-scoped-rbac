@@ -13,12 +13,14 @@ from scoped_rbac.rest import AccessControlledModelViewSet, DefaultPageNumberPagi
 
 from .models import (
     ExampleAccessControlledModel,
+    ExampleCachedContextsModel,
     ExampleDerivedContextModel,
     ExampleTaggedContextsModel,
     ExampleWithMultipleContexts,
 )
 from .serializers import (
     ExampleAccessControlledModelSerializer,
+    ExampleCachedContextsModelSerializer,
     ExampleDerivedContextModelSerializer,
     ExampleTaggedContextsModelSerializer,
     ExampleWithMultipleContextsSerializer,
@@ -75,17 +77,14 @@ class ExampleAccessControlledModelViewSet(AccessControlledModelViewSet):
         etag_func=ExampleAccessControlledModelSerializer.etag_for,
     )
     def update(self, request, *args, **kwargs):
-        ret = super().update(request, *args, **kwargs)
-        headers["etag"] = serializer.etag()
-        headers["last-modified"] = serializer.last_modified()
-        return ret
+        return super().update(request, *args, **kwargs)
 
     @condition(
         last_modified_func=ExampleAccessControlledModelSerializer.last_modified_for,
         etag_func=ExampleAccessControlledModelSerializer.etag_for,
     )
     def destroy(self, request, *args, **kwargs):
-        return super().delete(request, *args, **kwargs)
+        return super().destroy(request, *args, **kwargs)
 
 
 class ExampleMultipleContextsModelViewSet(AccessControlledModelViewSet):
@@ -167,3 +166,13 @@ class ExampleTaggedContextsModelViewSet(AccessControlledModelViewSet):
     @property
     def resource_type_iri(self):
         return ExampleTaggedContextsModel.resource_type.iri
+
+
+class ExampleCachedContextsModelViewSet(AccessControlledModelViewSet):
+    queryset = ExampleCachedContextsModel.objects.all()
+    serializer_class = ExampleCachedContextsModelSerializer
+    permission_classes = [IsAuthorized]
+
+    @property
+    def resource_type_iri(self):
+        return ExampleCachedContextsModel.resource_type.iri

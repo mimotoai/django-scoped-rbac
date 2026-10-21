@@ -23,6 +23,9 @@ router.register(
 router.register(
     r"example-tagged-contexts-models", rest.ExampleTaggedContextsModelViewSet
 )
+router.register(
+    r"example-cached-contexts-models", rest.ExampleCachedContextsModelViewSet
+)
 
 # router.registry.extend(scoped_rbac.urls.router.registry)
 schema_view = get_schema_view("Test Scoped RBAC API")

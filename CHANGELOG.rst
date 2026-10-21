@@ -20,16 +20,35 @@ Unreleased
 * The user's grants are computed once per request (``policy_for`` caches them on
   the request), so an update to the user's own ``RoleAssignment`` cannot grant the
   permission that authorizes it.
+* The save and these checks run in a transaction on the model's write database
+  (``router.db_for_write``), and the checks read a fresh instance from that
+  database. Under a primary/replica router they no longer read a replica that
+  cannot see the update, and a denied update to a model routed to a non-default
+  database is rolled back there.
 * Creating or updating an object in the reserved ``__SOME_CONTEXT__`` context is
-  rejected with 400 and rolled back.
+  rejected with 400 and rolled back. Values equal to it after Unicode NFKC
+  normalisation, case folding and stripping whitespace (e.g.
+  ``__some_context__``) are rejected too, since a case- or accent-insensitive
+  collation could treat them as the same context. The contexts checked include
+  those reported by the view's permission classes' ``contexts_for``.
 * ``IsAuthorized`` now checks objects with multiple ``rbac_contexts`` against each
   of their contexts instead of failing; an object with no contexts is denied.
 * ``PATCH`` on ``RoleViewSet`` no longer raises ``TypeError``.
 
-**Note:** subclasses of ``AccessControlledModelViewSet`` that override
-``perform_update`` or ``perform_create`` must call ``super()``, or these checks are
-skipped. Side effects outside the database, such as signal handlers sending email,
-may run before a denied update is rolled back.
+**Notes:**
+
+* Subclasses of ``AccessControlledModelViewSet`` that override ``perform_update``
+  or ``perform_create`` must call ``super()``, or these checks are skipped.
+* Rolling back a denied update requires a transactional database backend; with
+  e.g. MySQL's MyISAM the 403 is returned but the write remains.
+* Side effects outside the database, such as signal handlers sending email, may run
+  before a denied update is rolled back.
+* Models whose ``rbac_contexts`` come from relations should query the instance's
+  own database, e.g. ``self.tags.using(self._state.db)``. Otherwise a read router
+  may answer them from a replica that does not see the update.
+* An update whose instance ends up saved to a database other than its write
+  database now fails with ``ImproperlyConfigured``, because it could be neither
+  checked nor rolled back.
 
 v0.8.1
 ====================

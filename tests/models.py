@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.db import models
 
 from scoped_rbac.models import AccessControlledModel
@@ -85,4 +87,21 @@ class ExampleTaggedContextsModel(ScopedRbacTestModel, models.Model):
 
     @property
     def rbac_contexts(self):
-        return [tag.ctx for tag in self.tags.all()]
+        # Read from the database this instance came from, not the read router's.
+        return [tag.ctx for tag in self.tags.using(self._state.db)]
+
+
+class ExampleCachedContextsModel(ScopedRbacTestModel, models.Model):
+    """Like `ExampleTaggedContextsModel`, but `rbac_contexts` is cached per instance."""
+
+    tags = models.ManyToManyField(ExampleContextTag, blank=True, related_name="+")
+
+    resource_type = ResourceType(
+        "rbac.ExampleCachedContextsModel",
+        "ExampleCachedContextsModel",
+        "An example model whose rbac_contexts is a cached_property over m2m tags.",
+    )
+
+    @cached_property
+    def rbac_contexts(self):
+        return [tag.ctx for tag in self.tags.using(self._state.db)]

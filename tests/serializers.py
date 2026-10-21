@@ -8,6 +8,7 @@ from rest_framework.reverse import reverse
 
 from .models import (
     ExampleAccessControlledModel,
+    ExampleCachedContextsModel,
     ExampleDerivedContextModel,
     ExampleTaggedContextsModel,
     ExampleWithMultipleContexts,
@@ -213,4 +214,10 @@ class ExampleDerivedContextModelSerializer(serializers.ModelSerializer):
 class ExampleTaggedContextsModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExampleTaggedContextsModel
+        fields = ("id", "tags")
+
+
+class ExampleCachedContextsModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleCachedContextsModel
         fields = ("id", "tags")

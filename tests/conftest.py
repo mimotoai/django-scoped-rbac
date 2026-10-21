@@ -20,8 +20,14 @@ def pytest_configure(config):
 
     settings.configure(
         DEBUG_PROPAGATE_EXCEPTIONS=True,
+        # "other" and "replica" are separate in-memory databases for multi-database
+        # tests. No routers are installed globally; tests opt in with
+        # override_settings(DATABASE_ROUTERS=[...]). "replica" is deliberately not a
+        # TEST MIRROR, so it never sees writes made to "default".
         DATABASES={
-            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+            "other": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+            "replica": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
         },
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",
