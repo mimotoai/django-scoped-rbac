@@ -106,3 +106,21 @@ def test_sum_policies_copies_a_set_of_contexts():
 
     assert total.should_allow(GET_THING, SOME_CONTEXT) is True
     assert total.should_allow(GET_THING, "ctx2") is False
+
+
+def test_get_contexts_for_any_context_is_unrestricted():
+    root = root_of({"ctx1": True}, {"*": {"GET": ["Thing"]}})
+
+    assert root.get_contexts_for(GET_THING) is None
+
+
+def test_sum_policies_does_not_copy_any_context():
+    total = RootPolicy()
+
+    sum_policies(
+        total, policy_from_json({"*": {"GET": ["Thing"]}, "ctx1": {"PUT": ["Thing"]}})
+    )
+
+    assert set(total.policy.children) == {"*", "ctx1", SOME_CONTEXT}
+    assert total.policy.children[SOME_CONTEXT] == policy_from_json({"PUT": ["Thing"]})
+    assert total.should_allow(GET_THING, SOME_CONTEXT) is True

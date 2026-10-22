@@ -109,6 +109,3 @@ ignore = ["E501"]
 # ConditionalAnonymousAuthentication references undefined names and is unused; it
 # needs a redesign rather than a lint fix.
 "src/scoped_rbac/authentication.py" = ["F821"]
-# sum_policies' loop ignores its context variable (every grant is re-added under
-# SOME_CONTEXT); whether that is intended needs review before changing it.
-"src/scoped_rbac/permissions.py" = ["B007"]

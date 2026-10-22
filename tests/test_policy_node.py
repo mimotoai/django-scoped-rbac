@@ -459,3 +459,52 @@ class TestMessages:
                 {"condition": "a == 1"},
             ]
         }
+
+
+class TestWildcard:
+    """A "*" key matches any key at its level."""
+
+    def test_matches_any_key(self):
+        n = node(**{"*": node(y=POLICY_TRUE)})
+
+        assert n.evaluate("x", "y") is ALLOWED
+        assert n.evaluate("*", "y") is ALLOWED
+        assert n.evaluate("x", "z") is DENIED
+        assert n.evaluate("x") is DENIED
+        assert n.evaluate() is DENIED
+
+    def test_specific_key_then_wildcard_then_conditions(self, recording_operators):
+        n = node(op("unknown"), x=node(op("deny")), **{"*": node(op("unknown"))})
+
+        assert n.evaluate("x") is UNDETERMINED
+        assert recording_operators == ["deny", "unknown", "unknown"]
+
+        recording_operators.clear()
+        assert n.evaluate("*") is UNDETERMINED
+        assert recording_operators == ["unknown", "unknown"]
+
+    @pytest.mark.parametrize(
+        "definition",
+        [["*"], {"*": True}, {"*": ["*"]}, {"*": {"*": True}}, [{"*": "true"}]],
+        ids=repr,
+    )
+    def test_in_a_role_is_like_true(self, definition):
+        root = RootPolicy().add_json_policy_for_context(definition, "ctx")
+
+        for permission in (Permission("GET", "Thing"), Permission("PUT", None)):
+            assert root.evaluate(permission, "ctx") is ALLOWED
+            assert root.evaluate(permission, "other") is DENIED
+
+    def test_any_action_on_a_resource_type(self):
+        root = RootPolicy().add_json_policy_for_context({"*": ["Thing"]}, "ctx")
+
+        assert root.should_allow(Permission("GET", "Thing"), "ctx") is True
+        assert root.should_allow(Permission("DELETE", "Thing"), "ctx") is True
+        assert root.should_allow(Permission("GET", "Other"), "ctx") is False
+
+    def test_any_context_in_a_settings_default(self):
+        root = RootPolicy().add_policy(policy_from_json({"*": {"GET": ["Thing"]}}))
+
+        assert root.should_allow(Permission("GET", "Thing"), "ctx1") is True
+        assert root.should_allow(Permission("GET", "Thing"), "__SOME_CONTEXT__")
+        assert root.should_allow(Permission("PUT", "Thing"), "ctx1") is False

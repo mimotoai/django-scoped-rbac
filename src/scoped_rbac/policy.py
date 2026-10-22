@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 Permission = namedtuple("Permission", "action, resource_type")
 
+ANY = "*"
+"""The key that matches any key at its level of a policy: any context, action IRI
+or resource type IRI."""
+
 
 class Decision(enum.Enum):
     """The outcome of evaluating a policy. ``UNDETERMINED`` means that a condition
@@ -218,8 +222,9 @@ class PolicyNode(Policy):
 
     Evaluating a node for `keys` and a resource (Kleene OR, in this order, stopping
     at the first ``ALLOWED``): ``ALLOWED`` if `allow_all`; then the child for
-    ``keys[0]`` evaluated for the remaining keys; then each condition. Otherwise
-    ``UNDETERMINED`` if any of those was, else ``DENIED``.
+    ``keys[0]`` and then the child for :data:`ANY` (``"*"``), each evaluated for the
+    remaining keys; then each condition. Otherwise ``UNDETERMINED`` if any of
+    those was, else ``DENIED``.
     """
 
     __slots__ = ("allow_all", "children", "conditions")
@@ -261,8 +266,9 @@ class PolicyNode(Policy):
         return self._evaluate(keys, resource)
 
     def _children_for(self, key):
-        child = self.children.get(key)
-        return () if child is None else (child,)
+        """The children that match `key`: its own, then the one for any key."""
+        keys = (key,) if key == ANY else (key, ANY)
+        return tuple(self.children[k] for k in keys if k in self.children)
 
     def _evaluate(self, keys, resource):
         if self.allow_all:
@@ -624,8 +630,11 @@ class RootPolicy:
     def get_contexts_for(self, permission):
         """The contexts a GET list is restricted to, or ``None`` for no
         restriction. Top-level conditions are ignored, so filtering fails closed
-        when there are also context grants (issue #5)."""
+        when there are also context grants (issue #5). Grants in any context
+        (:data:`ANY`) are not restricted, like allow-all."""
         # FIXME This ignores `permission` (issue #5).
         if self.policy.allow_all or not self.policy.children:
+            return None
+        if ANY in self.policy.children:
             return None
         return list(self.policy.children)

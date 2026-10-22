@@ -15,9 +15,10 @@ def sum_policies(total_policy, additional_policy):
     """
     total_policy.add_policy(additional_policy)
     # Only the grants under each context are copied: a top-level condition or
-    # allow-all already applies in every context, SOME_CONTEXT included.
+    # allow-all, or a grant in any context, already applies in SOME_CONTEXT.
     for context, p in policy.as_node(additional_policy).children.items():
-        total_policy.add_policy_for_context(p, SOME_CONTEXT)
+        if context != policy.ANY:
+            total_policy.add_policy_for_context(p, SOME_CONTEXT)
 
 
 _POLICY_CACHE_ATTR = "_scoped_rbac_policy"
