@@ -10,6 +10,7 @@ from scoped_rbac.policy import (
     Permission,
     PolicyDict,
     PolicySet,
+    RootPolicy,
     policy_from_json,
 )
 
@@ -269,6 +270,60 @@ class TestMerging:
         assert PolicyDict({"x": e1}).sum_with(PolicyDict({"x": e2})).to_json() == {
             "x": ["a == 1", "a == 2"]
         }
+
+    @pytest.mark.parametrize(
+        "other, other_contexts",
+        [
+            (Expression("a == 2"), set()),
+            (
+                ExpressionList(Expression("a == 2"), Operator({"operator": "istrue"})),
+                set(),
+            ),
+            (PolicySet("x"), {"x"}),
+            (PolicyDict({"y": Expression("a == 2")}), {"y"}),
+            (
+                CompoundPolicy(
+                    policy_dict=PolicyDict({"z": POLICY_TRUE}),
+                    expressions=ExpressionList(Expression("a == 2")),
+                ),
+                {"z"},
+            ),
+            (CompoundPolicy(expressions=Expression("a == 2")), set()),
+        ],
+        ids=["expression", "list", "set", "dict", "compound", "lone_compound"],
+    )
+    @pytest.mark.parametrize(
+        "lone",
+        [Expression("a == 1"), Operator({"operator": "istrue"})],
+        ids=["expression", "operator"],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_a_lone_condition_merges(
+        self, lone, other, other_contexts, reverse
+    ):
+        # Characterisation of the current node classes (see the class docstring).
+        # Settings may supply hand-built policies, whose `expressions` may be a lone
+        # condition rather than an `ExpressionList`.
+        compound = CompoundPolicy(
+            policy_dict=PolicyDict({"w": POLICY_TRUE}), expressions=lone
+        )
+        a, b = (other, compound) if reverse else (compound, other)
+
+        policy = a.sum_with(b)
+
+        for keys in [(), ("w",), ("x",), ("y",), ("z",), ("v",)]:
+            for resource in [{"a": 1}, {"a": 2}, {"a": 3}, {}]:
+                expected = a.should_allow(*keys, resource=resource) or b.should_allow(
+                    *keys, resource=resource
+                )
+                actual = policy.should_allow(*keys, resource=resource)
+                assert actual is expected, (keys, resource)
+        contexts = RootPolicy().add_policy(policy).get_contexts_for(permission_one)
+        assert set(contexts) == {"w"} | other_contexts
+        if not any(isinstance(p, Operator) for p in (lone, other)) and not isinstance(
+            other, ExpressionList
+        ):
+            assert isinstance(policy.to_json()["expressions"], list)
 
     @pytest.mark.parametrize(
         "policy",

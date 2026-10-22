@@ -300,7 +300,11 @@ class CompoundPolicy(Policy):
         self.policy_dict = PolicyDict({}) if policy_dict is None else policy_dict
         if policy_set is not None:
             self.policy_dict = self.policy_dict.sum_with(policy_set)
-        self.expressions = ExpressionList() if expressions is None else expressions
+        if expressions is None:
+            expressions = ExpressionList()
+        elif isinstance(expressions, (Expression, Operator)):
+            expressions = ExpressionList(expressions)
+        self.expressions = expressions
 
     def should_allow(self, *args, **kwargs):
         return self.policy_dict.should_allow(
