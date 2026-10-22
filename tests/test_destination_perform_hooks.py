@@ -3,7 +3,7 @@ that read the object through the view's queryset."""
 
 import pytest
 from django.db.models import F, Value
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, JSONArray
 
 from scoped_rbac.permissions import IsAuthorized
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
@@ -15,6 +15,7 @@ from .helpers import (
     assert_reserved_context_rejected,
     call_view,
     grant,
+    with_permissions,
 )
 from .models import ExampleAccessControlledModel
 from .serializers import ExampleNamedModelSerializer
@@ -189,18 +190,181 @@ class UnarchivedViewSet(NamedModelViewSet):
         return ExampleAccessControlledModel.objects.exclude(name="archived")
 
 
-@pytest.mark.parametrize("granted, status", [(("A",), 200), ((), 403)])
 @pytest.mark.django_db
-def test_update_moving_object_out_of_the_queryset_is_still_checked(
-    user, granted, status
-):
-    grant(user, {"http.PATCH": [EXAMPLE]}, *granted)
+def test_update_moving_object_out_of_the_queryset_is_allowed(user):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
     target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
 
     response = call_view(
         UnarchivedViewSet, user, "patch", {"name": "archived"}, pk=target.pk
     )
 
-    assert response.status_code == status, response.content
+    assert response.status_code == 200, response.content
     target.refresh_from_db()
-    assert target.name == ("archived" if status == 200 else "x")
+    assert target.name == "archived"
+
+
+@pytest.mark.django_db
+def test_update_moving_object_out_of_the_queryset_is_still_checked(user):
+    # Allowed before the save (A); only the post-save re-read, which must fall
+    # back to the base manager, sees the move to Z.
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
+    target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
+
+    response = call_view(
+        UnarchivedViewSet,
+        user,
+        "patch",
+        {"name": "archived", "rbac_context": "Z"},
+        pk=target.pk,
+    )
+
+    assert_permission_denied(response)
+    target.refresh_from_db()
+    assert (target.name, target.rbac_context) == ("x", "A")
+
+
+# The rbac_context column is checked whenever it moves, whatever contexts_for
+# reports: RbacFilter lists objects by the column.
+
+
+class NameIsAuthorized(IsAuthorized):
+    """An object's context is its name."""
+
+    def contexts_for(self, obj):
+        return [obj.name]
+
+
+class RbacContextsAnnotatedViewSet(NamedModelViewSet):
+    """`rbac_contexts` comes from a queryset annotation, not the model class."""
+
+    def get_queryset(self):
+        return ExampleAccessControlledModel.objects.annotate(
+            rbac_contexts=JSONArray("name")
+        )
+
+
+COLUMN_VIEWS = {
+    "parent-annotation": AnnotatedViewSet,
+    "contexts-for-name": with_permissions(NamedModelViewSet, NameIsAuthorized),
+    "rbac-contexts-annotation": RbacContextsAnnotatedViewSet,
+}
+
+
+def column_target():
+    """In A by every view's notion: name, parent and column."""
+    return ExampleAccessControlledModel.objects.create(
+        name="A", rbac_context="A", parent_context=parent("A")
+    )
+
+
+@pytest.mark.parametrize("viewset", COLUMN_VIEWS.values(), ids=COLUMN_VIEWS.keys())
+@pytest.mark.django_db
+def test_moving_rbac_context_column_is_checked_with_any_contexts_source(user, viewset):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
+    target = column_target()
+
+    response = call_view(viewset, user, "patch", {"rbac_context": "Z"}, pk=target.pk)
+
+    assert_permission_denied(response)
+    target.refresh_from_db()
+    assert target.rbac_context == "A"
+
+
+@pytest.mark.parametrize("viewset", COLUMN_VIEWS.values(), ids=COLUMN_VIEWS.keys())
+@pytest.mark.django_db
+def test_moving_rbac_context_column_to_granted_context_is_allowed_with_any_source(
+    user, viewset
+):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A", "Z")
+    target = column_target()
+
+    response = call_view(viewset, user, "patch", {"rbac_context": "Z"}, pk=target.pk)
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.rbac_context == "Z"
+
+
+@pytest.mark.django_db
+def test_annotated_rbac_contexts_into_reserved_context_are_rejected(user):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
+    target = column_target()
+
+    response = call_view(
+        RbacContextsAnnotatedViewSet,
+        user,
+        "patch",
+        {"name": SOME_CONTEXT},
+        pk=target.pk,
+    )
+
+    assert_reserved_context_rejected(response)
+    target.refresh_from_db()
+    assert target.name == "A"
+
+
+@pytest.mark.django_db
+def test_annotated_rbac_contexts_into_granted_context_are_allowed(user):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A", "B")
+    target = column_target()
+
+    response = call_view(
+        RbacContextsAnnotatedViewSet, user, "patch", {"name": "B"}, pk=target.pk
+    )
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.name == "B"
+
+
+# Bulk create (many=True): every created object is checked
+
+
+class BulkSerializer(ExampleNamedModelSerializer):
+    @classmethod
+    def contexts_from(cls, content):
+        items = content if isinstance(content, list) else [content]
+        return [item.get("rbac_context", "") for item in items]
+
+
+class BulkCreateViewSet(NamedModelViewSet):
+    serializer_class = BulkSerializer
+
+    def get_serializer(self, *args, **kwargs):
+        if isinstance(kwargs.get("data"), list):
+            kwargs["many"] = True
+        return super().get_serializer(*args, **kwargs)
+
+
+@pytest.mark.django_db
+def test_bulk_create_into_reserved_context_is_rejected(user):
+    grant(user, {"http.POST": [EXAMPLE]}, "A")
+
+    response = call_view(
+        BulkCreateViewSet,
+        user,
+        "post",
+        [
+            {"name": "ok", "rbac_context": "A"},
+            {"name": "x", "rbac_context": SOME_CONTEXT},
+        ],
+    )
+
+    assert_reserved_context_rejected(response)
+    assert not ExampleAccessControlledModel.objects.exists()
+
+
+@pytest.mark.django_db
+def test_bulk_create_into_granted_context_is_allowed(user):
+    grant(user, {"http.POST": [EXAMPLE]}, "A")
+
+    response = call_view(
+        BulkCreateViewSet,
+        user,
+        "post",
+        [{"name": "x", "rbac_context": "A"}, {"name": "y", "rbac_context": "A"}],
+    )
+
+    assert response.status_code == 201, response.content
+    assert ExampleAccessControlledModel.objects.filter(rbac_context="A").count() == 2

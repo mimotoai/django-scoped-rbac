@@ -57,9 +57,7 @@ def _is_saved_instance(instance):
     )
 
 
-def _tracks_rbac_context_column(model):
-    """True if `model` has an `rbac_context` and also defines `rbac_contexts`."""
-    return hasattr(model, "rbac_context") and hasattr(model, "rbac_contexts")
+_NO_RBAC_CONTEXT = object()
 
 
 def _leaf_permissions(permission):
@@ -162,8 +160,8 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         """
         Call `serializer.save(**save_kwargs)` in a transaction on the model's write
         database and reject the new object (400, rolled back) if it is in a
-        reserved context. If `save()` leaves no saved model instance in
-        `serializer.instance`, there is nothing to check and none is made.
+        reserved context. With `many=True`, each created object is checked. Results
+        of `save()` that are not saved model instances are not checked.
 
         Subclasses overriding this **MUST** call `super()`, passing any extra save
         arguments as `save_kwargs` (e.g. `owner=self.request.user`). Requires a
@@ -173,10 +171,13 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         db = router.db_for_write(self.model_for(serializer))
         with transaction.atomic(using=db):
             serializer.save(**save_kwargs)
-            if not _is_saved_instance(serializer.instance):
-                return
-            persisted = self._persisted_instance(serializer, db)
-            self.check_not_reserved_context(persisted)
+            created = serializer.instance
+            if not isinstance(created, (list, tuple)):  # many=True gives a list
+                created = [created]
+            for instance in created:
+                if _is_saved_instance(instance):
+                    persisted = self._persisted_instance(instance, db)
+                    self.check_not_reserved_context(persisted)
 
     def perform_update(self, serializer, **save_kwargs):
         """
@@ -197,8 +198,7 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         model = type(instance)
         db = router.db_for_write(model, instance=instance)
         pk_before = instance.pk
-        tracks_column = _tracks_rbac_context_column(model)
-        column_before = instance.rbac_context if tracks_column else None
+        column_before = getattr(instance, "rbac_context", _NO_RBAC_CONTEXT)
         # Not redundant: with e.g. `X | IsAuthorized`, DRF's OR short-circuits at X
         # before the save, so without this line the first policy_for call would be
         # the post-save check's, and it would see grants the update itself created
@@ -211,21 +211,24 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
                     "The primary key cannot be changed by an update.",
                     code="primary_key_changed",
                 )
-            persisted = self._persisted_instance(serializer, db)
-            moved_column = tracks_column and persisted.rbac_context != column_before
+            persisted = self._persisted_instance(serializer.instance, db)
+            column_after = getattr(persisted, "rbac_context", _NO_RBAC_CONTEXT)
+            moved_column = column_after is not _NO_RBAC_CONTEXT and (
+                column_before is _NO_RBAC_CONTEXT or column_after != column_before
+            )
             self.check_post_save_permissions(
                 self.request,
                 persisted,
-                new_rbac_context=persisted.rbac_context if moved_column else None,
+                new_rbac_context=column_after if moved_column else None,
             )
             self.check_not_reserved_context(persisted)
 
     def model_for(self, serializer):
         """
         The model `serializer` saves: its `Meta.model` (what a `ModelSerializer`
-        creates), else the queryset's model.
+        creates; for `many=True`, the child's), else the queryset's model.
         """
-        meta = getattr(serializer, "Meta", None)
+        meta = getattr(getattr(serializer, "child", serializer), "Meta", None)
         return getattr(meta, "model", None) or self.get_queryset().model
 
     def get_post_save_permissions(self):
@@ -249,11 +252,11 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         the destination still needs RBAC permission even when X allowed the
         request. Does nothing if there are no post-save permissions.
 
-        `new_rbac_context` is the new value of an `rbac_context` column that the
-        update changed on a model that also defines `rbac_contexts` (which
-        `contexts_for` checks instead of the column). Each permission's
-        `has_context_permission`, where defined, must then also allow the request
-        in that context, because `RbacFilter` lists objects by the column.
+        `new_rbac_context` is the new value of an `rbac_context` that the update
+        changed. Each permission's `has_context_permission`, where defined, must
+        then also allow the request in that context, whatever `contexts_for`
+        reports (e.g. `rbac_contexts` or an override), because `RbacFilter` lists
+        objects by `rbac_context`.
         """
         for permission in self.get_post_save_permissions():
             allowed = permission.has_object_permission(request, self, obj)
@@ -272,13 +275,12 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
                     code=getattr(permission, "code", None),
                 )
 
-    def _persisted_instance(self, serializer, db):
+    def _persisted_instance(self, instance, db):
         """
-        Refresh `serializer.instance` from `db` (for the response) and return a
-        fresh copy read from `db` for the checks: through `get_queryset()`, so
-        annotations are present, else (if it left the queryset) the base manager.
+        Refresh the saved `instance` from `db` (for the response) and return a fresh
+        copy read from `db` for the checks: through `get_queryset()`, so annotations
+        are present, else (if it left the queryset) the base manager.
         """
-        instance = serializer.instance
         if instance._state.db != db:
             raise ImproperlyConfigured(
                 f"{type(instance).__name__} was saved to database "
@@ -298,15 +300,14 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
     def _written_contexts(self, instance):
         """
         Every rbac context of `instance`: its `rbac_context` and `rbac_contexts`
-        (whichever the model has), plus those from the `contexts_for` of any
-        permission (nested ones included) that overrides `IsAuthorized`'s.
+        (whichever the instance has, annotations included), plus those from the
+        `contexts_for` of any permission (nested ones included) that overrides
+        `IsAuthorized`'s.
         """
         contexts = []
-        model = type(instance)
-        if hasattr(model, "rbac_context"):
+        if hasattr(instance, "rbac_context"):
             contexts.append(instance.rbac_context)
-        if hasattr(model, "rbac_contexts"):
-            contexts.extend(instance.rbac_contexts or ())
+        contexts.extend(getattr(instance, "rbac_contexts", None) or ())
         for permission in self.get_permissions():
             for leaf in _leaf_permissions(permission):
                 leaf_contexts_for = getattr(type(leaf), "contexts_for", None)
