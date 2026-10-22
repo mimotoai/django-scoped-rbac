@@ -1,3 +1,6 @@
+import uuid
+from functools import cached_property
+
 from django.db import models
 
 from scoped_rbac.models import AccessControlledModel
@@ -43,3 +46,104 @@ class ExampleWithMultipleContexts(ScopedRbacTestModel, models.Model):
     @property
     def rbac_contexts(self):
         return [self.context_1, self.context_2]
+
+
+class ExampleFolder(ScopedRbacTestModel, models.Model):
+    """Holds the context for `ExampleDerivedContextModel`; not access controlled."""
+
+    ctx = models.CharField(max_length=128, blank=True)
+
+
+class ExampleDerivedContextModel(ScopedRbacTestModel, AccessControlledModel):
+    """An access-controlled model whose `rbac_context` is derived in `save()`."""
+
+    name = models.CharField(max_length=128, blank=True)
+    folder = models.ForeignKey(ExampleFolder, on_delete=models.CASCADE)
+
+    resource_type = ResourceType(
+        "rbac.ExampleDerivedContextModel",
+        "ExampleDerivedContextModel",
+        "An example model whose rbac_context is derived from its folder in save().",
+    )
+
+    def save(self, *args, **kwargs):
+        self.rbac_context = self.folder.ctx
+        super().save(*args, **kwargs)
+
+
+class ExampleContextTag(ScopedRbacTestModel, models.Model):
+    ctx = models.CharField(max_length=128, blank=True)
+
+
+class ExampleTaggedContextsModel(ScopedRbacTestModel, models.Model):
+    """A model whose `rbac_contexts` come from a many-to-many relation."""
+
+    tags = models.ManyToManyField(ExampleContextTag, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleTaggedContextsModel",
+        "ExampleTaggedContextsModel",
+        "An example model whose rbac_contexts come from many-to-many tags.",
+    )
+
+    @property
+    def rbac_contexts(self):
+        # Read from the database this instance came from, not the read router's.
+        return [tag.ctx for tag in self.tags.using(self._state.db)]
+
+
+class ExampleCachedContextsModel(ScopedRbacTestModel, models.Model):
+    """Like `ExampleTaggedContextsModel`, but `rbac_contexts` is cached per instance."""
+
+    tags = models.ManyToManyField(ExampleContextTag, blank=True, related_name="+")
+
+    resource_type = ResourceType(
+        "rbac.ExampleCachedContextsModel",
+        "ExampleCachedContextsModel",
+        "An example model whose rbac_contexts is a cached_property over m2m tags.",
+    )
+
+    @cached_property
+    def rbac_contexts(self):
+        return [tag.ctx for tag in self.tags.using(self._state.db)]
+
+
+class ExampleProjectModel(ScopedRbacTestModel, models.Model):
+    """No `rbac_context(s)`: its context comes from a permission's `contexts_for`."""
+
+    project = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleProjectModel",
+        "ExampleProjectModel",
+        "An example model whose context is its project, via a permission class.",
+    )
+
+
+class ExampleUuidPkModel(ScopedRbacTestModel, AccessControlledModel):
+    """An access-controlled model with a client-suppliable (UUID) primary key."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    name = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleUuidPkModel",
+        "ExampleUuidPkModel",
+        "An example model whose primary key a serializer may expose as writable.",
+    )
+
+
+class ExampleBothContextsModel(ScopedRbacTestModel, AccessControlledModel):
+    """Has an `rbac_context` column and `rbac_contexts` that omit it."""
+
+    ctx_a = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleBothContextsModel",
+        "ExampleBothContextsModel",
+        "An example model with both rbac_context and rbac_contexts.",
+    )
+
+    @property
+    def rbac_contexts(self):
+        return [self.ctx_a]

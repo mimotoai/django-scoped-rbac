@@ -1,7 +1,43 @@
 import os
 import sys
 
+import pytest
+
 from .fixtures import editor_user, not_authorized_user, staff_user, superuser
+
+# Fixtures for the update-authorization tests. `.helpers` imports Django models, so
+# it is imported lazily: this module is loaded before `pytest_configure` sets up
+# Django.
+
+
+@pytest.fixture
+def user(django_user_model):
+    """A user without grants; tests grant what they need."""
+    return django_user_model.objects.create(username="context-a-admin")
+
+
+@pytest.fixture
+def ra_patcher_in_a(user):
+    """`user` may PATCH and GET RoleAssignments in context A only; returns the
+    user's own RoleAssignment (in A)."""
+    from .helpers import RA, assign, make_role
+
+    role = make_role({"http.PATCH": [RA], "http.GET": [RA]}, "A")
+    return assign(user, role, "A")
+
+
+@pytest.fixture
+def read_replica():
+    from .helpers import ReadReplicaRouter, installed_routers
+
+    yield from installed_routers(ReadReplicaRouter())
+
+
+@pytest.fixture
+def other_database():
+    from .helpers import OtherDatabaseRouter, installed_routers
+
+    yield from installed_routers(OtherDatabaseRouter())
 
 
 def pytest_addoption(parser):
@@ -20,8 +56,14 @@ def pytest_configure(config):
 
     settings.configure(
         DEBUG_PROPAGATE_EXCEPTIONS=True,
+        # "other" and "replica" are separate in-memory databases for multi-database
+        # tests. No routers are installed globally; tests opt in with
+        # override_settings(DATABASE_ROUTERS=[...]). "replica" is deliberately not a
+        # TEST MIRROR, so it never sees writes made to "default".
         DATABASES={
-            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+            "other": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+            "replica": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
         },
         SITE_ID=1,
         SECRET_KEY="not very secret in tests",

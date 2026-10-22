@@ -24,8 +24,31 @@ def sum_policies(total_policy, additional_policy):
         total_policy.add_policy_for_context(p, SOME_CONTEXT)
 
 
+_POLICY_CACHE_ATTR = "_scoped_rbac_policy"
+
+
 def policy_for(request):
-    # TODO figure out caching for this
+    """
+    Return the effective `RootPolicy` for `request.user`.
+
+    It is computed once per request and cached on the request, so every check made
+    while handling a request uses the grants the user had when it was first
+    computed. In particular, the checks `AccessControlledModelViewSet` makes after
+    saving an update are not affected by changes the update itself made to the
+    user's `RoleAssignment`s.
+    """
+    cached = getattr(request, _POLICY_CACHE_ATTR, None)
+    if cached is not None and cached[0] is request.user:
+        return cached[1]
+    effective_policy = _build_policy_for(request)
+    try:
+        setattr(request, _POLICY_CACHE_ATTR, (request.user, effective_policy))
+    except AttributeError:
+        pass
+    return effective_policy
+
+
+def _build_policy_for(request):
     if request.user.is_superuser:
         return ALLOWED
     total_policy = policy.RootPolicy()
@@ -58,15 +81,24 @@ def http_action_iri_for(request):
     return f"http.{method}"
 
 
+def _object_contexts(obj):
+    """
+    Return the rbac contexts of `obj`: its `rbac_contexts` if it defines them (which
+    may be empty, granting nothing), else `[obj.rbac_context]`.
+    """
+    contexts = getattr(obj, "rbac_contexts", None)
+    if contexts is None:
+        return [obj.rbac_context]
+    return list(contexts)
+
+
 class IsAuthorized(permissions.BasePermission):
     """
     Custom permission handling using the `rbac` model.
     """
 
     def contexts_for(self, obj):
-        contexts = getattr(obj, 'rbac_contexts', None)
-        if contexts is None:
-            return [obj.rbac_context]
+        return _object_contexts(obj)
 
     def contexts_from(self, view, content):
         if hasattr(view.serializer_class, "contexts_from"):
@@ -79,16 +111,28 @@ class IsAuthorized(permissions.BasePermission):
         """
         if not hasattr(view, "resource_type_iri_for"):
             return True
-        effective_policy = policy_for(request)
         contexts = self.contexts_for(obj)
-        for context in contexts:
-            if effective_policy.should_allow(
-                policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
-                obj.rbac_context,
-                obj,
-            ):
-                return True
-        return False
+        if not contexts:
+            # An object with no contexts is granted by no role; only superusers
+            # (whose policy_for allows everything) may act on it.
+            return bool(request.user.is_superuser)
+        return any(
+            self.has_context_permission(request, view, obj, context)
+            for context in contexts
+        )
+
+    def has_context_permission(self, request, view, obj, context):
+        """
+        True if the request's action on `obj`'s resource type is allowed in
+        `context`, with `obj` as the resource for any condition.
+        """
+        if not hasattr(view, "resource_type_iri_for"):
+            return True
+        return policy_for(request).should_allow(
+            policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
+            context,
+            obj,
+        )
 
     def has_permission(self, request, view):
         """
