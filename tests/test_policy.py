@@ -1,10 +1,16 @@
+import pytest
+
 from scoped_rbac.policy import (
     POLICY_FALSE,
     POLICY_TRUE,
+    CompoundPolicy,
+    Expression,
+    ExpressionList,
     Operator,
     Permission,
     PolicyDict,
     PolicySet,
+    policy_from_json,
 )
 
 permission_one = Permission(action="GET", resource_type="One")
@@ -166,3 +172,89 @@ def test_operator():
     assert operator.should_allow(resource=False) is False
     assert operator.should_allow(resource=42) is False
     assert operator.should_allow(resource=True) is True
+
+
+class TestMerging:
+    """`sum_with` across node types (GitLab issues #2 and #3)."""
+
+    @pytest.mark.parametrize(
+        "first, second",
+        [
+            ([{"http.GET": "status == 'ok'"}], {"http.GET": ["Other"]}),
+            ({"condition": "status == 'ok'"}, {"http.GET": ["Thing"]}),
+        ],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_conditional_and_plain_grants_merge(self, first, second, reverse):
+        a, b = policy_from_json(first), policy_from_json(second)
+        if reverse:
+            a, b = b, a
+
+        policy = a.sum_with(b)
+
+        ok, not_ok = {"status": "ok"}, {"status": "no"}
+        assert policy.should_allow("http.GET", "Anything", resource=ok) is True
+        assert policy.should_allow("http.GET", "Anything", resource=not_ok) is False
+        plain_type = "Other" if "Other" in str(second) else "Thing"
+        assert policy.should_allow("http.GET", plain_type, resource=not_ok) is True
+
+    def test_compound_policies_merge(self):
+        a = CompoundPolicy(
+            policy_dict=PolicyDict({"x": POLICY_TRUE}),
+            expressions=ExpressionList(Expression("a == 1")),
+        )
+        b = CompoundPolicy(
+            policy_set=PolicySet("y"), expressions=ExpressionList(Expression("a == 2"))
+        )
+
+        policy = a.sum_with(b)
+
+        assert policy.should_allow("x", resource={}) is True
+        assert policy.should_allow("y", resource={}) is True
+        assert policy.should_allow("z", resource={"a": 1}) is True
+        assert policy.should_allow("z", resource={"a": 2}) is True
+        assert policy.should_allow("z", resource={"a": 3}) is False
+
+    def test_operator_merged_into_empty_compound_policy_is_kept(self):
+        operator = Operator({"operator": "istrue"})
+
+        assert CompoundPolicy().sum_with(operator).should_allow(resource=True) is True
+        assert CompoundPolicy().add_expression(operator).should_allow(resource=True)
+
+    def test_merging_conditions_with_a_plain_grant_to_json(self):
+        policy = Expression("a == 1").sum_with(PolicySet("x"))
+
+        assert policy.to_json() == {
+            "expressions": ["a == 1"],
+            "policy_dict": {"x": True},
+        }
+
+    def test_to_json_of_merges_that_already_worked_is_unchanged(self):
+        e1, e2, e3 = Expression("a == 1"), Expression("a == 2"), Expression("a == 3")
+        assert e1.sum_with(e2).to_json() == ["a == 1", "a == 2"]
+        assert e1.sum_with(e2).sum_with(e3).to_json() == ["a == 3", "a == 1", "a == 2"]
+        assert PolicySet("y").sum_with(PolicySet("x")).to_json() == ["x", "y"]
+        assert PolicySet("y").sum_with(PolicyDict({"x": e1})).to_json() == {
+            "x": "a == 1",
+            "y": True,
+        }
+        assert PolicyDict({"x": e1}).sum_with(PolicyDict({"x": e2})).to_json() == {
+            "x": ["a == 1", "a == 2"]
+        }
+
+    @pytest.mark.parametrize(
+        "policy",
+        [
+            Expression("a == 1"),
+            Operator({"operator": "istrue"}),
+            ExpressionList(Expression("a == 1")),
+            PolicySet("x"),
+            PolicyDict({"x": POLICY_TRUE}),
+            CompoundPolicy(expressions=ExpressionList(Expression("a == 1"))),
+        ],
+        ids=repr,
+    )
+    @pytest.mark.parametrize("other", [None, object(), {"x": True}], ids=repr)
+    def test_merging_an_unsupported_type_raises(self, policy, other):
+        with pytest.raises(NotImplementedError, match="Unsupported type"):
+            policy.sum_with(other)

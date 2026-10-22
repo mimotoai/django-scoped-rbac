@@ -88,16 +88,7 @@ class Expression(Policy):
         return is_true(self.compiled_expression, resource)
 
     def sum_with(self, other_policy):
-        if isinstance(other_policy, PolicyBoolean):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, Expression) or isinstance(other_policy, Operator):
-            return ExpressionList(self, other_policy)
-        if isinstance(other_policy, PolicySet):
-            return CompoundPolicy(expression=self, policy_set=other_policy)
-        if isinstance(other_policy, PolicyDict):
-            return CompoundPolicy(expression=self, policy_dict=other_policy)
-        if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_expression(self)
+        return _sum_condition_with(self, other_policy)
 
     def __repr__(self):
         return f"Expression {repr(self.expression)}"
@@ -130,16 +121,7 @@ class Operator(Policy):
         return self.resolved_operator(resource, self.configuration)
 
     def sum_with(self, other_policy):
-        if isinstance(other_policy, PolicyBoolean):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, Expression) or isinstance(other_policy, Operator):
-            return ExpressionList(self, other_policy)
-        if isinstance(other_policy, PolicySet):
-            return CompoundPolicy(expression=self, policy_set=other_policy)
-        if isinstance(other_policy, PolicyDict):
-            return CompoundPolicy(expression=self, policy_dict=other_policy)
-        if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_expression(self)
+        return _sum_condition_with(self, other_policy)
 
     def __repr__(self):
         return json.dumps(self.configuration)
@@ -150,6 +132,27 @@ class Operator(Policy):
     @classmethod
     def from_json(cls, json_policy):
         return Expression(json_policy)
+
+
+def _sum_condition_with(condition, other_policy):
+    """Merge an `Expression` or `Operator` `condition` with `other_policy`."""
+    if isinstance(other_policy, PolicyBoolean):
+        return other_policy.sum_with(condition)
+    if isinstance(other_policy, (Expression, Operator)):
+        return ExpressionList(condition, other_policy)
+    if isinstance(other_policy, ExpressionList):
+        return ExpressionList(condition, *other_policy.expressions)
+    if isinstance(other_policy, PolicySet):
+        return CompoundPolicy(
+            policy_set=other_policy, expressions=ExpressionList(condition)
+        )
+    if isinstance(other_policy, PolicyDict):
+        return CompoundPolicy(
+            policy_dict=other_policy, expressions=ExpressionList(condition)
+        )
+    if isinstance(other_policy, CompoundPolicy):
+        return other_policy.add_expression(condition)
+    raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
 
 class ExpressionList(Policy):
@@ -165,14 +168,17 @@ class ExpressionList(Policy):
     def sum_with(self, other_policy):
         if isinstance(other_policy, PolicyBoolean):
             return other_policy.sum_with(self)
-        if isinstance(other_policy, Expression or isinstance(other_policy, Operator)):
+        if isinstance(other_policy, (Expression, Operator)):
             return self.add(other_policy)
+        if isinstance(other_policy, ExpressionList):
+            return ExpressionList(*self.expressions, *other_policy.expressions)
         if isinstance(other_policy, PolicySet):
-            return CompoundPolicy(expression=self, policy_set=other_policy)
+            return CompoundPolicy(policy_set=other_policy, expressions=self)
         if isinstance(other_policy, PolicyDict):
-            return CompoundPolicy(expression=self, policy_dict=other_policy)
+            return CompoundPolicy(policy_dict=other_policy, expressions=self)
         if isinstance(other_policy, CompoundPolicy):
             return other_policy.add_expression_list(self)
+        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
     def add(self, expression):
         return ExpressionList(expression, *self.expressions)
@@ -257,7 +263,7 @@ class PolicyDict(Policy):
         if isinstance(other_policy, PolicyDict):
             return self.recursive_sum_with(other_policy)
         if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_policy_set(self)
+            return other_policy.add_policy_dict(self)
         raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
     def add_all(self, key_policy_pairs):
@@ -291,10 +297,10 @@ class PolicyDict(Policy):
 
 class CompoundPolicy(Policy):
     def __init__(self, policy_dict=None, policy_set=None, expressions=None):
-        self.policy_dict = policy_dict or PolicyDict({})
-        if policy_set:
+        self.policy_dict = PolicyDict({}) if policy_dict is None else policy_dict
+        if policy_set is not None:
             self.policy_dict = self.policy_dict.sum_with(policy_set)
-        self.expressions = expressions or ExpressionList()
+        self.expressions = ExpressionList() if expressions is None else expressions
 
     def should_allow(self, *args, **kwargs):
         return self.policy_dict.should_allow(
@@ -302,18 +308,34 @@ class CompoundPolicy(Policy):
         ) or self.expressions.should_allow(*args, **kwargs)
 
     def sum_with(self, other_policy):
-        return other_policy.sum_with(self)
+        if isinstance(other_policy, PolicyBoolean):
+            return other_policy.sum_with(self)
+        if isinstance(other_policy, (Expression, Operator)):
+            return self.add_expression(other_policy)
+        if isinstance(other_policy, ExpressionList):
+            return self.add_expression_list(other_policy)
+        if isinstance(other_policy, PolicySet):
+            return self.add_policy_set(other_policy)
+        if isinstance(other_policy, PolicyDict):
+            return self.add_policy_dict(other_policy)
+        if isinstance(other_policy, CompoundPolicy):
+            return self.add_policy_dict(other_policy.policy_dict).add_expression_list(
+                other_policy.expressions
+            )
+        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
     def add_expression(self, expression):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
-            expressions=self.expressions.sum_with(expression),
+            expressions=self.expressions.add(expression),
         )
 
     def add_expression_list(self, expression_list):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
-            expressions=self.expressions.sum_with(expression_list),
+            expressions=ExpressionList(
+                *self.expressions.expressions, *expression_list.expressions
+            ),
         )
 
     def add_policy_set(self, policy_set):
