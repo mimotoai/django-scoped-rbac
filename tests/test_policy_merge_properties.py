@@ -87,6 +87,9 @@ POLICIES = {
         True,
     ),
     "operator_and_conditions": (merged(OPERATOR, CONDITION_A1, CONDITION_A2), True),
+    # A condition that is wrong if joined to another without parentheses: in
+    # "a == 1 || a > 1 ? a == 3 : false" the ternary takes the whole disjunction.
+    "ternary_condition": (from_json({"condition": "a > 1 ? a == 3 : false"}), False),
     # Conditions on an action (depth 1), and on a resource type (depth 2).
     "action_condition_or_set": (merged([{"x": "a == 1"}], {"x": ["y"]}), False),
     "resource_operator": (from_json({"x": {"y": OPERATOR}, "y": {"x": True}}), True),
@@ -119,6 +122,7 @@ TRIPLE_POLICIES = [
     "nested_condition_or_set",
     "action_condition_or_set",
     "resource_operator",
+    "ternary_condition",
 ]
 
 RAISES = "raises"
@@ -189,6 +193,20 @@ def test_pool_policies_are_distinct_and_not_constant():
         if varying[a] == varying[b]
     ]
     assert same == []
+
+
+@pytest.mark.parametrize("name", POLICIES)
+def test_merging_a_policy_with_itself_changes_nothing(name):
+    """`policy_for` reuses one policy per role, so a role assigned in two contexts is
+    merged with itself under `SOME_CONTEXT`."""
+    build, has_operator = POLICIES[name]
+    policy = build()
+    before = snapshot(policy, has_operator)
+
+    merged_policy = policy.sum_with(policy)
+
+    assert_allows_union(merged_policy, [before[0]], f"{name} + itself")
+    assert snapshot(policy, has_operator) == before
 
 
 @pytest.mark.parametrize("name_b", POLICIES)
