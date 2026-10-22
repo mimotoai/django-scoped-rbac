@@ -14,10 +14,14 @@ v0.9.2
   roles are combined (#2, #3).
 * ``sum_with`` on ``Expression``, ``Operator``, ``ExpressionList`` and
   ``CompoundPolicy`` raises ``NotImplementedError`` for a value it cannot merge,
-  instead of returning ``None`` (as ``PolicySet`` and ``PolicyDict`` already did).
-* List filtering no longer returns unfiltered results when a settings default
-  policy contains a context-level condition and the user also has role grants; such
-  conditions are ignored for list filtering (#2).
+  instead of returning ``None`` or failing with ``AttributeError`` or
+  ``RecursionError``.
+* GET querysets (list and retrieve) are restricted to the contexts the user's policy
+  names when a settings default's top-level condition is combined with context
+  grants (roles, staff defaults or several settings sources), instead of raising;
+  such conditions are ignored when filtering, so objects allowed only by them are
+  not returned (404 on retrieve). A default that is only a top-level condition is
+  still unfiltered (#5).
 
 v0.9.1
 ====================
