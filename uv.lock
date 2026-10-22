@@ -415,7 +415,7 @@ wheels = [
 
 [[package]]
 name = "django-scoped-rbac"
-version = "0.9.0"
+version = "0.9.1"
 source = { editable = "." }
 dependencies = [
     { name = "cel-expr-python" },
