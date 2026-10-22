@@ -11,6 +11,7 @@ Welcome to Django Scoped RBAC's documentation!
    :caption: Contents:
 
    intro
+   policies
    context
    contexts_collection
    role

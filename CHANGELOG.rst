@@ -4,6 +4,92 @@ scoped_rbac Change Log
 
 .. current developments
 
+v0.10.1
+====================
+
+Policy engine release. The branch carries version 0.10.0; CI's publish job bumps the
+patch version, so 0.10.1 is the first release published with these changes. See the
+new *Policies* documentation page.
+
+**Added:**
+
+* ``PolicyNode``: every policy is now one immutable node type with ``allow_all``,
+  ``children`` (a read-only mapping of key to node) and ``conditions`` (a tuple of
+  ``Expression``/``Operator``, the new ``Condition`` base class). ``sum_with``
+  returns a new node: allow-all is or-ed, children are merged key by key, and
+  conditions are concatenated left then right without exact duplicates.
+  ``policy_from_json`` returns a ``PolicyNode`` for every input.
+* Three-valued evaluation: ``Decision`` (``ALLOWED``, ``DENIED``,
+  ``UNDETERMINED``), ``evaluate(*keys, resource=None)`` on policies and
+  ``RootPolicy.evaluate(permission, context_id, resource=None)``. A CEL condition
+  that fails to evaluate (e.g. a missing value, or no resource) or is not a boolean
+  is ``UNDETERMINED``, as is an operator returning ``None``. ``should_allow`` is
+  unchanged: ``True`` only for ``ALLOWED``, so the server still denies.
+* ``RootPolicy.explain(permission, context_id, resource=None)`` (and ``explain`` on
+  policies): the decision and each condition evaluated to reach it, with its own
+  decision and message (``Explanation``, ``ConditionResult``).
+* ``scoped_rbac.cel.evaluate(compiled_expression, data)``, returning ``True``,
+  ``False`` or ``None`` (undetermined). The existing ``scoped_rbac.cel`` functions
+  are unchanged.
+* Policy JSON: a condition object may carry a ``"message"``
+  (``{"condition": "...", "message": "..."}``), and a condition in the list form
+  (``[{"http.DELETE": ...}]``) may be such an object.
+* Policy JSON: the key ``"*"`` matches any context, action or resource type at its
+  level (``{"http.GET": {"*": true}}`` is ``{"http.GET": true}``).
+* ``RootPolicy.from_json``, reading the ``/policy`` wire format back into a policy
+  that evaluates and explains every request as the original.
+* Conformance fixtures in ``tests/conformance`` for other implementations of the
+  policy engine.
+
+**Changed:**
+
+* ``GET /policy`` (``RootPolicy.to_json()``) uses an explicit wire format: exactly
+  three levels of keys (context, action IRI, resource type IRI), each a name or
+  ``"*"`` (any), with leaves ``true`` or ``{"conditions": [...]}``. Clients reading
+  it must be updated. For a role ``{"http.GET": ["app.Thing"]}`` assigned in
+  ``ctx`` (``__SOME_CONTEXT__`` entries omitted), and for a superuser:
+
+  .. code-block:: text
+
+     0.9.2:  {"ctx": {"http.GET": ["app.Thing"]}}        true
+     0.10:   {"ctx": {"http.GET": {"app.Thing": true}}}  {"*": {"*": {"*": true}}}
+
+* ``"*"`` is reserved in policies: it no longer names a context, action or resource
+  type. A GET list is not restricted to particular contexts when the user's policy
+  grants something in any context (``"*"``), as when it allows everything.
+* A settings default that is only a context name or a list of context names (e.g.
+  ``"ctx1"`` or ``["ctx1", "ctx2"]``) is treated like any other context grant: GET
+  lists are restricted to those contexts (0.9.2 left them unfiltered), and the
+  grants also apply in ``__SOME_CONTEXT__`` (0.9.2 did not copy them there), so
+  list and other requests checked in some context are allowed by them.
+* A policy made only of top-level conditions leaves GET lists unfiltered however it
+  was built; 0.9.2 filtered one built as a ``CompoundPolicy``, or merged with an
+  empty grant, to no contexts (#5).
+* Merged conditions are kept in merge order, which can change the order in which
+  conditions are evaluated and listed.
+* ``to_json`` of a policy other than ``RootPolicy`` gives the node's form
+  (``true``, ``false`` or ``{"children": ..., "conditions": [...]}``), and that of
+  an ``Expression`` or ``Operator`` its condition object
+  (``{"condition": ..., "message": ...}``).
+* Only ``PolicyNode``, ``Expression`` and ``Operator`` can be merged; any other
+  ``Policy`` subclass raises ``NotImplementedError``.
+
+**Deprecated:**
+
+* ``PolicyTrue``, ``PolicyFalse``, ``PolicySet``, ``PolicyDict``, ``ExpressionList``
+  and ``CompoundPolicy`` are now functions that emit a ``DeprecationWarning`` and
+  return the equivalent ``PolicyNode`` (``POLICY_TRUE``/``POLICY_FALSE`` for the
+  first two). They are no longer classes, so ``isinstance`` checks against them
+  raise ``TypeError``, and their results do not have the old attributes and methods
+  (``policies``, ``allowed``, ``expressions``, ``policy_dict``, ``keys()``,
+  ``add_*``); use ``allow_all``, ``children`` and ``conditions``.
+
+**Fixed:**
+
+* ``RootPolicy.to_json`` and ``/policy`` no longer fail for policies with operator
+  conditions (``Operator.to_json`` raised), and the output round-trips through
+  ``RootPolicy.from_json``; ``Operator.from_json`` returns an ``Operator`` (#28).
+
 v0.9.2
 ====================
 
