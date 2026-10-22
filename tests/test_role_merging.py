@@ -9,7 +9,7 @@ from rest_framework.test import APIRequestFactory
 from scoped_rbac import conf
 from scoped_rbac.conf import policy_for_authenticated, policy_for_staff
 from scoped_rbac.permissions import policy_for
-from scoped_rbac.policy import Permission
+from scoped_rbac.policy import Permission, policy_from_json
 from scoped_rbac.rbac_contexts import DEFAULT_CONTEXT, SOME_CONTEXT
 
 from .helpers import EXAMPLE, EXAMPLE_URL, assign, client_for, grant, make_role
@@ -109,20 +109,28 @@ def test_merging_roles_does_not_change_the_settings_default_policy(django_user_m
     )
 
 
-@pytest.fixture
-def context_condition_for_authenticated(monkeypatch):
-    """Make the settings default policy for authenticated users a context-level
-    condition. Resolved settings are cached in `conf.RESOLVED_SETTINGS`, so the cache
-    is cleared for the test and the original restored afterwards."""
-    scoped_rbac = {
-        **settings.SCOPED_RBAC,
-        "POLICY_FOR_AUTHENTICATED": {"condition": "false"},
-    }
-    with override_settings(SCOPED_RBAC=scoped_rbac):
+def overridden_defaults(monkeypatch, **defaults):
+    """Replace `SCOPED_RBAC` settings `defaults` for a test. Resolved settings are
+    cached in `conf.RESOLVED_SETTINGS`, so the cache is cleared for the test and the
+    original restored afterwards."""
+    original = conf.RESOLVED_SETTINGS
+    with override_settings(SCOPED_RBAC={**settings.SCOPED_RBAC, **defaults}):
         monkeypatch.setattr(conf, "RESOLVED_SETTINGS", None)
-        assert policy_for_authenticated().to_json() == "false"
         yield
     monkeypatch.undo()
+    assert conf.RESOLVED_SETTINGS is original
+
+
+@pytest.fixture
+def context_condition_for_authenticated(monkeypatch):
+    """The settings default policy for authenticated users is a context-level
+    condition."""
+    defaults = overridden_defaults(
+        monkeypatch, POLICY_FOR_AUTHENTICATED={"condition": "false"}
+    )
+    for _ in defaults:
+        assert policy_for_authenticated().to_json() == "false"
+        yield
     assert policy_for_authenticated().to_json() is False
 
 
@@ -139,3 +147,104 @@ def test_list_is_filtered_when_a_default_policy_has_a_context_condition(
     assert response.status_code == 200, response.content
     # Only the ctx2 object; the ctx3 one is filtered out.
     assert response.data["count"] == 1
+
+
+@pytest.mark.django_db
+def test_a_role_assigned_in_two_contexts_grants_exactly_its_permissions(user):
+    role = make_role([{"http.GET": "status == 'ok'"}, "http.PUT"])
+    assign(user, role, "ctx1")
+    assign(user, role, "ctx2")
+
+    policy = policy_for_user(user)
+
+    for rbac_context in ("ctx1", "ctx2", SOME_CONTEXT):
+        assert policy.should_allow(get("Any"), rbac_context, OK), rbac_context
+        assert not policy.should_allow(get("Any"), rbac_context, NOT_OK), rbac_context
+        assert policy.should_allow(Permission("http.PUT", "Any"), rbac_context, NOT_OK)
+        assert not policy.should_allow(Permission("http.DELETE", "Any"), rbac_context)
+    assert not policy.should_allow(get("Any"), "ctx3", OK)
+    assert not policy.should_allow(Permission("http.PUT", "Any"), "ctx3", OK)
+
+
+# Defaults: a top-level condition merged with a context grant that is a condition (a
+# `CompoundPolicy` at the root), and a top-level condition.
+COMPOUND_DEFAULT_JSON = (
+    {"condition": "status == 'ok'"},
+    {"ctx1": {"http.GET": {"Thing": "kind == 'a'"}}},
+)
+CONDITION_DEFAULT_JSON = {"condition": "kind == 'staff'"}
+DEFAULT_PROBES = [
+    (Permission(action, resource_type), rbac_context, resource)
+    for action in ("http.GET", "http.PUT")
+    for resource_type in ("Thing", "Other")
+    for rbac_context in ("ctx1", "ctx2", SOME_CONTEXT)
+    for resource in (OK, NOT_OK, {"kind": "a"}, {"kind": "b"}, {"kind": "staff"}, {})
+]
+
+
+def allowed(policy, probes):
+    """The `probes` a `Policy` allows."""
+    return [
+        probe
+        for probe in probes
+        if policy.should_allow(probe[1], *probe[0], resource=probe[2])
+    ]
+
+
+@pytest.fixture(params=["compound_for_authenticated", "compound_for_staff"])
+def conditional_defaults(request, monkeypatch):
+    """The compound default for authenticated users (so it is the root that the
+    other default and roles are merged into) or for staff (so it is merged into a
+    top-level condition)."""
+    first, second = (policy_from_json(p) for p in COMPOUND_DEFAULT_JSON)
+    defaults = [first.sum_with(second), CONDITION_DEFAULT_JSON]
+    if request.param == "compound_for_staff":
+        defaults.reverse()
+    yield from overridden_defaults(
+        monkeypatch, POLICY_FOR_AUTHENTICATED=defaults[0], POLICY_FOR_STAFF=defaults[1]
+    )
+
+
+@pytest.mark.django_db
+def test_merging_roles_does_not_change_conditional_default_policies(
+    django_user_model, conditional_defaults
+):
+    staff = django_user_model.objects.create(username="staff", is_staff=True)
+    other_staff = django_user_model.objects.create(username="other", is_staff=True)
+    defaults = [policy_for_authenticated(), policy_for_staff()]
+    defaults_json = [p.to_json() for p in defaults]
+    defaults_allow = [allowed(p, DEFAULT_PROBES) for p in defaults]
+    assert all(defaults_allow)
+    grant(
+        staff,
+        {"http.GET": {"Thing": {"condition": "kind == 'b'"}, "Other": True}},
+        "ctx1",
+    )
+    grant(staff, {"http.PUT": ["Thing"]}, "ctx2")
+
+    staff_policy = policy_for_user(staff)
+
+    assert staff_policy.should_allow(get("Thing"), "ctx1", {"kind": "b"})
+    assert staff_policy.should_allow(get("Other"), "ctx1", NOT_OK)
+    assert staff_policy.should_allow(Permission("http.PUT", "Thing"), "ctx2", NOT_OK)
+    assert staff_policy.should_allow(get("Thing"), "ctx1", {"kind": "a"})
+    assert staff_policy.should_allow(get("Other"), "ctx2", {"kind": "staff"})
+    assert not staff_policy.should_allow(get("Other"), "ctx2", NOT_OK)
+    assert [policy_for_authenticated(), policy_for_staff()] == defaults
+    assert [p.to_json() for p in defaults] == defaults_json
+    assert [allowed(p, DEFAULT_PROBES) for p in defaults] == defaults_allow
+    # policy_for also grants each default's context grants in SOME_CONTEXT.
+    other_policy = policy_for_user(other_staff)
+    assert [p for p in DEFAULT_PROBES if other_policy.should_allow(*p)] == [
+        (permission, rbac_context, resource)
+        for permission, rbac_context, resource in DEFAULT_PROBES
+        if any(
+            (permission, c, resource) in allow
+            for allow in defaults_allow
+            for c in (
+                ("ctx1", "ctx2", SOME_CONTEXT)
+                if rbac_context == SOME_CONTEXT
+                else (rbac_context,)
+            )
+        )
+    ]
