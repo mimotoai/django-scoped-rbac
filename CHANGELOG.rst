@@ -4,6 +4,17 @@ scoped_rbac Change Log
 
 .. current developments
 
+v0.9.2
+====================
+
+**Fixed:**
+
+* Merging roles whose grants combine conditional and unconditional permissions no
+  longer raises, and merge results no longer depend on the order roles are combined
+  (#2, #3).
+* Merging policies of a type ``sum_with`` cannot combine raises
+  ``NotImplementedError`` instead of returning ``None``.
+
 v0.9.1
 ====================
 
