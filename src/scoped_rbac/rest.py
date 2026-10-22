@@ -49,6 +49,17 @@ def _is_reserved_context(context):
     return visible.strip().startswith(_RESERVED_CONTEXT_PREFIX)
 
 
+def _created_items(result):
+    """The items of a `serializer.save()` result: the instance itself, or each
+    element of a `many=True` result (a list, QuerySet or other iterable)."""
+    if result is None or isinstance(result, models.Model):
+        return [result]
+    try:
+        return list(result)
+    except TypeError:  # neither a model nor iterable: nothing to check
+        return []
+
+
 def _is_saved_instance(instance):
     return (
         isinstance(instance, models.Model)
@@ -160,8 +171,9 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         """
         Call `serializer.save(**save_kwargs)` in a transaction on the model's write
         database and reject the new object (400, rolled back) if it is in a
-        reserved context. With `many=True`, each created object is checked. Results
-        of `save()` that are not saved model instances are not checked.
+        reserved context. With `many=True`, each created object in the result (a
+        list, QuerySet or other iterable) is checked; items that are not saved model
+        instances are not.
 
         Subclasses overriding this **MUST** call `super()`, passing any extra save
         arguments as `save_kwargs` (e.g. `owner=self.request.user`). Requires a
@@ -171,10 +183,7 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         db = router.db_for_write(self.model_for(serializer))
         with transaction.atomic(using=db):
             serializer.save(**save_kwargs)
-            created = serializer.instance
-            if not isinstance(created, (list, tuple)):  # many=True gives a list
-                created = [created]
-            for instance in created:
+            for instance in _created_items(serializer.instance):
                 if _is_saved_instance(instance):
                     persisted = self._persisted_instance(instance, db)
                     self.check_not_reserved_context(persisted)
@@ -186,8 +195,9 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         reserved context is rejected (400) and `check_post_save_permissions` must
         allow it (403); either rolls the save back.
 
-        Subclasses overriding this **MUST** call `super()`, passing any extra save
-        arguments as `save_kwargs`. Requires a transactional database backend, and
+        Only single-object updates are supported: with `many=True` this raises
+        `ImproperlyConfigured` before saving. Subclasses overriding this **MUST**
+        call `super()`, passing any extra save arguments as `save_kwargs`. Requires a transactional database backend, and
         `router.db_for_write` must not depend on mutable instance fields such as
         `rbac_context` (#42). Relation-based `rbac_contexts` must query
         `self._state.db` (e.g. `self.tags.using(self._state.db)`), not the read
@@ -195,6 +205,13 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         a concurrent change before the save can be overwritten (#43).
         """
         instance = serializer.instance
+        if not isinstance(instance, models.Model):
+            raise ImproperlyConfigured(
+                "Bulk updates (many=True) are not supported by "
+                f"{AccessControlledModelViewSet.__name__}: they bypass the pre-save "
+                "get_object() permission check, so the subclass must authorize them "
+                "itself and not call perform_update."
+            )
         model = type(instance)
         db = router.db_for_write(model, instance=instance)
         pk_before = instance.pk

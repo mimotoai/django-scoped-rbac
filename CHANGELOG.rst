@@ -80,8 +80,12 @@ Unreleased
   are skipped.
 * A create whose serializer leaves no saved model instance in
   ``serializer.instance`` (e.g. ``create()`` returns an unsaved object), or such an
-  item in a ``many=True`` result, is not checked after saving, since there is
-  nothing persisted to check.
+  item in a ``many=True`` result (a list, QuerySet or other iterable), is not
+  checked after saving, since there is nothing persisted to check.
+* Bulk (``many=True``) updates are not supported: ``perform_update`` raises
+  ``ImproperlyConfigured`` before saving, because they bypass DRF's pre-save
+  ``get_object()`` check. A subclass offering bulk updates must authorize them
+  itself.
 * Rolling back a denied write requires a transactional database backend; with e.g.
   MySQL's MyISAM the error is returned but the write remains. Side effects outside
   the database, such as signal handlers sending email, may run before a rollback.

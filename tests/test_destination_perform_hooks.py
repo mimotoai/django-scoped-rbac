@@ -2,8 +2,12 @@
 that read the object through the view's queryset."""
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import F, Value
 from django.db.models.functions import Coalesce, JSONArray
+from rest_framework import serializers
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from scoped_rbac.permissions import IsAuthorized
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
@@ -368,3 +372,101 @@ def test_bulk_create_into_granted_context_is_allowed(user):
 
     assert response.status_code == 201, response.content
     assert ExampleAccessControlledModel.objects.filter(rbac_context="A").count() == 2
+
+
+class QuerySetBulkListSerializer(serializers.ListSerializer):
+    """Creates with bulk_create and returns a QuerySet of the new rows."""
+
+    def create(self, validated_data):
+        objs = [ExampleAccessControlledModel(**data) for data in validated_data]
+        ExampleAccessControlledModel.objects.bulk_create(objs)
+        return ExampleAccessControlledModel.objects.filter(
+            pk__in=[obj.pk for obj in objs]
+        )
+
+
+class QuerySetBulkSerializer(BulkSerializer):
+    class Meta(BulkSerializer.Meta):
+        list_serializer_class = QuerySetBulkListSerializer
+
+
+class QuerySetBulkCreateViewSet(BulkCreateViewSet):
+    serializer_class = QuerySetBulkSerializer
+
+
+@pytest.mark.django_db
+def test_bulk_create_returning_queryset_into_reserved_context_is_rejected(user):
+    grant(user, {"http.POST": [EXAMPLE]}, "A")
+
+    response = call_view(
+        QuerySetBulkCreateViewSet,
+        user,
+        "post",
+        [
+            {"name": "ok", "rbac_context": "A"},
+            {"name": "x", "rbac_context": SOME_CONTEXT},
+        ],
+    )
+
+    assert_reserved_context_rejected(response)
+    assert not ExampleAccessControlledModel.objects.exists()
+
+
+@pytest.mark.django_db
+def test_bulk_create_returning_queryset_into_granted_context_is_allowed(user):
+    grant(user, {"http.POST": [EXAMPLE]}, "A")
+
+    response = call_view(
+        QuerySetBulkCreateViewSet,
+        user,
+        "post",
+        [{"name": "x", "rbac_context": "A"}, {"name": "y", "rbac_context": "A"}],
+    )
+
+    assert response.status_code == 201, response.content
+    assert ExampleAccessControlledModel.objects.filter(rbac_context="A").count() == 2
+
+
+# Bulk (many=True) updates bypass the pre-save get_object() check: refused
+
+
+class ListUpdateSerializer(serializers.ListSerializer):
+    def update(self, instances, validated_data):
+        for instance, data in zip(instances, validated_data, strict=True):
+            for attr, value in data.items():
+                setattr(instance, attr, value)
+            instance.save()
+        return instances
+
+
+class BulkUpdateSerializer(ExampleNamedModelSerializer):
+    class Meta(ExampleNamedModelSerializer.Meta):
+        list_serializer_class = ListUpdateSerializer
+
+
+class BulkUpdateViewSet(NamedModelViewSet):
+    serializer_class = BulkUpdateSerializer
+
+    def bulk_partial_update(self, request):
+        instances = list(self.get_queryset().order_by("pk"))
+        serializer = self.get_serializer(
+            instances, data=request.data, many=True, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+
+@pytest.mark.django_db
+def test_bulk_update_is_refused_before_saving(user):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
+    target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
+    request = APIRequestFactory().patch("/", [{"rbac_context": "Z"}], format="json")
+    force_authenticate(request, user=user)
+    view = BulkUpdateViewSet.as_view({"patch": "bulk_partial_update"})
+
+    with pytest.raises(ImproperlyConfigured, match="[Bb]ulk updates"):
+        view(request)
+
+    target.refresh_from_db()
+    assert target.rbac_context == "A"
