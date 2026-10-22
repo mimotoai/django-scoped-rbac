@@ -324,27 +324,16 @@ class CompoundPolicy(Policy):
             )
         raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
-    @staticmethod
-    def _conditions(expressions):
-        """The conditions in `expressions`: an `ExpressionList`, or a lone
-        `Expression` or `Operator` in a hand-built `CompoundPolicy`."""
-        if isinstance(expressions, (Expression, Operator)):
-            return (expressions,)
-        return expressions.expressions
-
     def add_expression(self, expression):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
-            expressions=ExpressionList(expression, *self._conditions(self.expressions)),
+            expressions=self.expressions.sum_with(expression),
         )
 
     def add_expression_list(self, expression_list):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
-            expressions=ExpressionList(
-                *self._conditions(self.expressions),
-                *self._conditions(expression_list),
-            ),
+            expressions=self.expressions.sum_with(expression_list),
         )
 
     def add_policy_set(self, policy_set):

@@ -272,23 +272,41 @@ class TestMerging:
         }
 
     @pytest.mark.parametrize(
-        "other, other_contexts",
+        "other, other_contexts, master_json",
         [
-            (Expression("a == 2"), set()),
+            (
+                Expression("a == 2"),
+                set(),
+                {"expressions": ["a == 1", "a == 2"], "policy_dict": {"w": True}},
+            ),
             (
                 ExpressionList(Expression("a == 2"), Operator({"operator": "istrue"})),
                 set(),
+                None,  # Operator.to_json is broken (#28).
             ),
-            (PolicySet("x"), {"x"}),
-            (PolicyDict({"y": Expression("a == 2")}), {"y"}),
+            (
+                PolicySet("x"),
+                {"x"},
+                {"expressions": "a == 1", "policy_dict": {"w": True, "x": True}},
+            ),
+            (
+                PolicyDict({"y": Expression("a == 2")}),
+                {"y"},
+                {"expressions": "a == 1", "policy_dict": {"w": True, "y": "a == 2"}},
+            ),
             (
                 CompoundPolicy(
                     policy_dict=PolicyDict({"z": POLICY_TRUE}),
                     expressions=ExpressionList(Expression("a == 2")),
                 ),
                 {"z"},
+                None,  # RecursionError in 0.9.1.
             ),
-            (CompoundPolicy(expressions=Expression("a == 2")), set()),
+            (
+                CompoundPolicy(expressions=Expression("a == 2")),
+                set(),
+                None,  # RecursionError in 0.9.1.
+            ),
         ],
         ids=["expression", "list", "set", "dict", "compound", "lone_compound"],
     )
@@ -299,7 +317,7 @@ class TestMerging:
     )
     @pytest.mark.parametrize("reverse", [False, True])
     def test_compound_policy_with_a_lone_condition_merges(
-        self, lone, other, other_contexts, reverse
+        self, lone, other, other_contexts, master_json, reverse
     ):
         # Characterisation of the current node classes (see the class docstring).
         # Settings may supply hand-built policies, whose `expressions` may be a lone
@@ -321,16 +339,106 @@ class TestMerging:
         contexts = RootPolicy().add_policy(policy).get_contexts_for(permission_one)
         assert set(contexts) == {"w"} | other_contexts
         if isinstance(lone, Expression):
-            # `expressions` serialises as given, as in 0.9.1, until merged with
+            # `to_json` as in 0.9.1 (`master_json`, computed with 0.9.1's policy.py)
+            # in either order; `expressions` serialises as given until merged with
             # another condition.
             assert compound.to_json() == {
                 "expressions": "a == 1",
                 "policy_dict": {"w": True},
             }
-            if isinstance(other, (PolicySet, PolicyDict)):
-                assert policy.to_json()["expressions"] == "a == 1"
+            if master_json is not None:
+                assert policy.to_json() == master_json
             elif not isinstance(other, ExpressionList):
                 policy.to_json()
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_a_lone_condition_keeps_condition_order(self, reverse):
+        # Characterisation of the current node classes (see the class docstring).
+        # Expected `to_json` values were computed with 0.9.1's policy.py.
+        def hand():
+            return CompoundPolicy(
+                policy_dict=PolicyDict({"w": POLICY_TRUE}),
+                expressions=Expression("a == 1"),
+            )
+
+        def ordered(a, b):
+            return b.sum_with(a) if reverse else a.sum_with(b)
+
+        merged = ordered(hand(), policy_from_json({"condition": "a == 2"}))
+        nested = ordered(PolicyDict({"x": hand()}), policy_from_json([{"x": "a == 2"}]))
+
+        merged_json = {"expressions": ["a == 1", "a == 2"], "policy_dict": {"w": True}}
+        assert merged.to_json() == merged_json
+        assert nested.to_json() == {"x": merged_json}
+
+    @pytest.mark.parametrize(
+        "expressions, other, master_json",
+        [
+            (
+                POLICY_FALSE,
+                Expression("a == 2"),
+                {"expressions": "a == 2", "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_FALSE,
+                ExpressionList(Expression("a == 2"), Expression("a == 3")),
+                {"expressions": ["a == 2", "a == 3"], "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_TRUE,
+                Expression("a == 2"),
+                {"expressions": True, "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_TRUE,
+                ExpressionList(Expression("a == 2"), Expression("a == 3")),
+                {"expressions": True, "policy_dict": {"w": True}},
+            ),
+            *[
+                (
+                    boolean,
+                    CompoundPolicy(
+                        policy_dict=PolicyDict({"z": POLICY_TRUE}),
+                        expressions=ExpressionList(Expression("a == 2")),
+                    ),
+                    None,  # RecursionError in 0.9.1.
+                )
+                for boolean in (POLICY_FALSE, POLICY_TRUE)
+            ],
+        ],
+        ids=[
+            "false-condition",
+            "false-list",
+            "true-condition",
+            "true-list",
+            "false-compound",
+            "true-compound",
+        ],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_boolean_expressions_merges(
+        self, expressions, other, master_json, reverse
+    ):
+        # Characterisation of the current node classes (see the class docstring).
+        # Expected `to_json` values were computed with 0.9.1's policy.py.
+        compound = CompoundPolicy(
+            policy_dict=PolicyDict({"w": POLICY_TRUE}), expressions=expressions
+        )
+        a, b = (other, compound) if reverse else (compound, other)
+
+        policy = a.sum_with(b)
+
+        for keys in [(), ("w",), ("z",), ("v",)]:
+            for resource in [{"a": 1}, {"a": 2}, {"a": 3}, {}]:
+                expected = a.should_allow(*keys, resource=resource) or b.should_allow(
+                    *keys, resource=resource
+                )
+                actual = policy.should_allow(*keys, resource=resource)
+                assert actual is expected, (keys, resource)
+        if master_json is not None:
+            assert policy.to_json() == master_json
+        else:
+            policy.to_json()
 
     @pytest.mark.parametrize(
         "policy",
