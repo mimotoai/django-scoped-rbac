@@ -22,7 +22,8 @@ v0.9.2
   such conditions are ignored when filtering, so objects allowed only by them are
   not returned (404 on retrieve). A settings default given as a ``CompoundPolicy``
   instance, which 0.9.1 left unfiltered, is likewise filtered to the contexts it
-  names. A default that is only a top-level condition is still unfiltered (#5).
+  names (possibly to nothing). A default that is only a top-level JSON condition (or
+  a lone ``Expression`` or ``Operator``) is still unfiltered (#5).
 
 v0.9.1
 ====================
