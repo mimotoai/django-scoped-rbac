@@ -1,3 +1,4 @@
+import uuid
 from functools import cached_property
 
 from django.db import models
@@ -117,3 +118,32 @@ class ExampleProjectModel(ScopedRbacTestModel, models.Model):
         "ExampleProjectModel",
         "An example model whose context is its project, via a permission class.",
     )
+
+
+class ExampleUuidPkModel(ScopedRbacTestModel, AccessControlledModel):
+    """An access-controlled model with a client-suppliable (UUID) primary key."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    name = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleUuidPkModel",
+        "ExampleUuidPkModel",
+        "An example model whose primary key a serializer may expose as writable.",
+    )
+
+
+class ExampleBothContextsModel(ScopedRbacTestModel, AccessControlledModel):
+    """Has an `rbac_context` column and `rbac_contexts` that omit it."""
+
+    ctx_a = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleBothContextsModel",
+        "ExampleBothContextsModel",
+        "An example model with both rbac_context and rbac_contexts.",
+    )
+
+    @property
+    def rbac_contexts(self):
+        return [self.ctx_a]

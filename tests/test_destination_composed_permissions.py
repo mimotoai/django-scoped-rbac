@@ -49,6 +49,8 @@ PROJECT_PERMISSIONS = {
     "and": [ProjectIsAuthorized & IsAuthenticated],
     "not-not": [~~ProjectIsAuthorized],
     "or": [ProjectIsAuthorized | DenyAll],
+    "and-right": [IsAuthenticated & ProjectIsAuthorized],
+    "or-right": [DenyAll | ProjectIsAuthorized],
 }
 
 

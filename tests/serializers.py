@@ -8,10 +8,12 @@ from rest_framework.reverse import reverse
 
 from .models import (
     ExampleAccessControlledModel,
+    ExampleBothContextsModel,
     ExampleCachedContextsModel,
     ExampleDerivedContextModel,
     ExampleProjectModel,
     ExampleTaggedContextsModel,
+    ExampleUuidPkModel,
     ExampleWithMultipleContexts,
 )
 
@@ -228,3 +230,24 @@ class ExampleProjectModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExampleProjectModel
         fields = ("id", "project")
+
+
+class ExampleUuidPkModelSerializer(serializers.ModelSerializer):
+    # Declared explicitly, so DRF adds no UniqueValidator: the pk is writable.
+    id = serializers.UUIDField(required=False)
+
+    class Meta:
+        model = ExampleUuidPkModel
+        fields = ("id", "name", "rbac_context")
+
+
+class ExampleBothContextsModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleBothContextsModel
+        fields = ("id", "ctx_a", "rbac_context")
+
+
+class ExampleNamedModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleAccessControlledModel
+        fields = ("id", "name", "rbac_context")

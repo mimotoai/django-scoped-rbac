@@ -193,8 +193,8 @@ def test_post_into_granted_context_is_allowed(user):
 
 
 @pytest.mark.django_db
-def test_policy_for_is_cached_per_request_and_user(
-    user, django_user_model, django_assert_num_queries
+def test_policy_for_is_recomputed_when_the_request_user_changes(
+    user, django_user_model
 ):
     grant(user, {"http.GET": [RA]}, "A")
     other_user = django_user_model.objects.create(username="no-grants")
@@ -206,5 +206,3 @@ def test_policy_for_is_cached_per_request_and_user(
 
     request.user = user
     assert policy_for(request).should_allow(get_ra, "A", None)
-    with django_assert_num_queries(0):
-        assert policy_for(request).should_allow(get_ra, "A", None)

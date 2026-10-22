@@ -1,0 +1,100 @@
+"""After an update, only the RBAC permissions are checked against the saved object."""
+
+import pytest
+from rest_framework.permissions import BasePermission, IsAuthenticated
+
+from scoped_rbac.models import RoleAssignment
+from scoped_rbac.permissions import IsAuthorized
+from scoped_rbac.rest import RoleAssignmentViewSet
+
+from .helpers import (
+    EXAMPLE,
+    AllowAll,
+    DenyAll,
+    NamedModelViewSet,
+    assert_permission_denied,
+    call_view,
+    grant,
+    with_permissions,
+)
+from .models import ExampleAccessControlledModel
+
+
+class NotLocked(BasePermission):
+    """An application object permission: locked objects cannot be edited."""
+
+    def has_object_permission(self, request, view, obj):
+        return obj.name != "locked"
+
+
+@pytest.mark.django_db
+def test_app_object_permissions_are_not_rechecked_after_the_save(user):
+    grant(user, {"http.PATCH": [EXAMPLE]}, "A")
+    target = ExampleAccessControlledModel.objects.create(name="draft", rbac_context="A")
+    viewset = with_permissions(NamedModelViewSet, IsAuthorized, NotLocked)
+
+    response = call_view(viewset, user, "patch", {"name": "locked"}, pk=target.pk)
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.name == "locked"
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    [[IsAuthenticated & IsAuthorized], [DenyAll | IsAuthorized]],
+    ids=["and", "or"],
+)
+@pytest.mark.django_db
+def test_composed_rbac_permission_still_checks_the_destination(
+    user, ra_patcher_in_a, permissions
+):
+    viewset = with_permissions(RoleAssignmentViewSet, *permissions)
+
+    response = call_view(
+        viewset, user, "patch", {"rbac_context": "V"}, pk=ra_patcher_in_a.pk
+    )
+
+    assert_permission_denied(response)
+    ra_patcher_in_a.refresh_from_db()
+    assert ra_patcher_in_a.rbac_context == "A"
+
+
+@pytest.mark.django_db
+def test_destination_requires_rbac_even_when_another_permission_allows(
+    user, ra_patcher_in_a
+):
+    # AllowAll | IsAuthorized: DRF's OR short-circuits at AllowAll before and
+    # after the save, so policy_for is first called by the post-save RBAC check.
+    # It must still see the grants from before the update (PATCH in A only), not
+    # those of the moved assignment itself (PATCH in V).
+    viewset = with_permissions(RoleAssignmentViewSet, AllowAll | IsAuthorized)
+
+    response = call_view(
+        viewset, user, "patch", {"rbac_context": "V"}, pk=ra_patcher_in_a.pk
+    )
+
+    assert_permission_denied(response)
+    assert RoleAssignment.objects.get(pk=ra_patcher_in_a.pk).rbac_context == "A"
+
+
+class NoPostSaveChecksViewSet(RoleAssignmentViewSet):
+    def get_post_save_permissions(self):
+        return []
+
+
+@pytest.mark.django_db
+def test_overriding_post_save_permissions_to_none_skips_the_check(
+    user, ra_patcher_in_a
+):
+    response = call_view(
+        NoPostSaveChecksViewSet,
+        user,
+        "patch",
+        {"rbac_context": "V"},
+        pk=ra_patcher_in_a.pk,
+    )
+
+    assert response.status_code == 200, response.content
+    ra_patcher_in_a.refresh_from_db()
+    assert ra_patcher_in_a.rbac_context == "V"

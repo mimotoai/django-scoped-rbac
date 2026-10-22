@@ -11,9 +11,11 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils.timezone import now
 
 from scoped_rbac.models import Role, RoleAssignment
+from scoped_rbac.rbac_contexts import SOME_CONTEXT
 
 from .helpers import (
     DERIVED,
+    DERIVED_LIST_URL,
     DERIVED_URL,
     EXAMPLE,
     RA,
@@ -22,6 +24,7 @@ from .helpers import (
     TAGGED,
     TAGGED_URL,
     assert_permission_denied,
+    assert_reserved_context_rejected,
     call_view,
     client_for,
     grant,
@@ -185,3 +188,17 @@ def test_update_saved_outside_the_write_database_fails_closed(user):
     target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
     with pytest.raises(ImproperlyConfigured, match="'other'"):
         call_view(SavesElsewhereViewSet, user, "patch", {"name": "y"}, pk=target.pk)
+
+
+@pytest.mark.django_db(databases=["default", "other"])
+def test_create_into_reserved_context_on_another_database_is_rolled_back(
+    superuser, other_database
+):
+    folder = ExampleFolder.objects.create(ctx=SOME_CONTEXT)
+
+    response = client_for(superuser.instance).post(
+        DERIVED_LIST_URL, {"name": "doc", "folder": folder.pk}, format="json"
+    )
+
+    assert_reserved_context_rejected(response)
+    assert not ExampleDerivedContextModel.objects.using("other").exists()

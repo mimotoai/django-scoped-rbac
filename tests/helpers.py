@@ -14,15 +14,22 @@ from scoped_rbac.rest import AccessControlledModelViewSet
 
 from .models import (
     ExampleAccessControlledModel,
+    ExampleBothContextsModel,
     ExampleCachedContextsModel,
     ExampleContextTag,
     ExampleDerivedContextModel,
     ExampleFolder,
     ExampleProjectModel,
     ExampleTaggedContextsModel,
+    ExampleUuidPkModel,
     ExampleWithMultipleContexts,
 )
-from .serializers import ExampleProjectModelSerializer
+from .serializers import (
+    ExampleBothContextsModelSerializer,
+    ExampleNamedModelSerializer,
+    ExampleProjectModelSerializer,
+    ExampleUuidPkModelSerializer,
+)
 
 RA = "rbac.RoleAssignment"
 ROLE = "rbac.Role"
@@ -32,6 +39,8 @@ CACHED = ExampleCachedContextsModel.resource_type.iri
 EXAMPLE = ExampleAccessControlledModel.resource_type.iri
 MULTI = ExampleWithMultipleContexts.resource_type.iri
 PROJECT = ExampleProjectModel.resource_type.iri
+UUID_PK = ExampleUuidPkModel.resource_type.iri
+BOTH_CONTEXTS = ExampleBothContextsModel.resource_type.iri
 
 RA_URL = "/api/scoped-rbac/role-assignments/{}/"
 RA_LIST_URL = "/api/scoped-rbac/role-assignments/"
@@ -176,6 +185,29 @@ class ProjectViewSet(AccessControlledModelViewSet):
     serializer_class = ExampleProjectModelSerializer
     resource_type_iri = ExampleProjectModel.resource_type.iri
     permission_classes = [ProjectIsAuthorized]
+
+
+class NamedModelViewSet(AccessControlledModelViewSet):
+    """`ExampleAccessControlledModel` with a writable `rbac_context`."""
+
+    queryset = ExampleAccessControlledModel.objects.all()
+    serializer_class = ExampleNamedModelSerializer
+    resource_type_iri = EXAMPLE
+    permission_classes = [IsAuthorized]
+
+
+class UuidPkViewSet(AccessControlledModelViewSet):
+    queryset = ExampleUuidPkModel.objects.all()
+    serializer_class = ExampleUuidPkModelSerializer
+    resource_type_iri = UUID_PK
+    permission_classes = [IsAuthorized]
+
+
+class BothContextsViewSet(AccessControlledModelViewSet):
+    queryset = ExampleBothContextsModel.objects.all()
+    serializer_class = ExampleBothContextsModelSerializer
+    resource_type_iri = BOTH_CONTEXTS
+    permission_classes = [IsAuthorized]
 
 
 def with_permissions(viewset, *permission_classes):

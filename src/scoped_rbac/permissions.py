@@ -24,7 +24,7 @@ def sum_policies(total_policy, additional_policy):
         total_policy.add_policy_for_context(p, SOME_CONTEXT)
 
 
-POLICY_CACHE_ATTR = "_scoped_rbac_policy"
+_POLICY_CACHE_ATTR = "_scoped_rbac_policy"
 
 
 def policy_for(request):
@@ -37,12 +37,12 @@ def policy_for(request):
     saving an update are not affected by changes the update itself made to the
     user's `RoleAssignment`s.
     """
-    cached = getattr(request, POLICY_CACHE_ATTR, None)
+    cached = getattr(request, _POLICY_CACHE_ATTR, None)
     if cached is not None and cached[0] is request.user:
         return cached[1]
     effective_policy = _build_policy_for(request)
     try:
-        setattr(request, POLICY_CACHE_ATTR, (request.user, effective_policy))
+        setattr(request, _POLICY_CACHE_ATTR, (request.user, effective_policy))
     except AttributeError:
         pass
     return effective_policy
@@ -81,7 +81,7 @@ def http_action_iri_for(request):
     return f"http.{method}"
 
 
-def contexts_for(obj):
+def _object_contexts(obj):
     """
     Return the rbac contexts of `obj`: its `rbac_contexts` if it defines them (which
     may be empty, granting nothing), else `[obj.rbac_context]`.
@@ -98,7 +98,7 @@ class IsAuthorized(permissions.BasePermission):
     """
 
     def contexts_for(self, obj):
-        return contexts_for(obj)
+        return _object_contexts(obj)
 
     def contexts_from(self, view, content):
         if hasattr(view.serializer_class, "contexts_from"):

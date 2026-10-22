@@ -18,24 +18,28 @@ from scrudful.rest_framework import scrudful_viewset
 
 from .filters import RbacFilter
 from .models import Role, RoleAssignment, UserResourceType
-from .permissions import contexts_for, policy_for
+from .permissions import IsAuthorized, policy_for
 from .rbac_contexts import SOME_CONTEXT
 from .serializers import RoleAssignmentSerializer, RoleSerializer, UserSerializer
 
-
-def _normalize_context(context):
-    return unicodedata.normalize("NFKC", context).casefold().strip()
+_RESERVED_CONTEXT_PREFIX = "__"
 
 
-_RESERVED_CONTEXT = _normalize_context(SOME_CONTEXT)
+def _is_reserved_context(context):
+    """
+    True if `context` is in the reserved namespace: after NFKC normalisation,
+    removing format characters (Unicode category Cf, e.g. zero-width spaces and soft
+    hyphens) and stripping whitespace, it starts with `_RESERVED_CONTEXT_PREFIX`.
+    Non-string contexts are never reserved.
+    """
+    if not isinstance(context, str):
+        return False
+    normalized = unicodedata.normalize("NFKC", context)
+    visible = "".join(c for c in normalized if unicodedata.category(c) != "Cf")
+    return visible.strip().startswith(_RESERVED_CONTEXT_PREFIX)
 
 
-def is_reserved_context(context):
-    """True if `context` is, or is a lookalike of, the reserved `SOME_CONTEXT`."""
-    return isinstance(context, str) and _normalize_context(context) == _RESERVED_CONTEXT
-
-
-def leaf_permissions(permission):
+def _leaf_permissions(permission):
     """
     Yield the permissions composed into `permission` by DRF's `&`, `|` and `~`
     (`AND`, `OR`, `NOT`), or `permission` itself if it is not composed.
@@ -52,7 +56,7 @@ def leaf_permissions(permission):
         return
     for operand in operands:
         if operand is not None:
-            yield from leaf_permissions(operand)
+            yield from _leaf_permissions(operand)
 
 
 class DefaultPageNumberPagination(PageNumberPagination):
@@ -133,18 +137,14 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
 
     def perform_create(self, serializer):
         """
-        Save the new object, rejecting it (and rolling the save back) if it was saved
-        in the reserved `SOME_CONTEXT`. The save and the check run in a transaction
-        on the model's write database (`router.db_for_write`).
+        Save the new object in a transaction on its write database and reject it
+        (400, rolled back) if it was saved in a reserved context.
 
-        `router.db_for_write` for access-controlled models must not depend on
-        mutable instance fields such as `rbac_context`; otherwise the save can be
-        routed to a different database than the transaction and is not rolled
-        back (#42).
-
-        Subclasses overriding `perform_create` **MUST** call `super()`.
+        Subclasses overriding this **MUST** call `super()`. Requires a transactional
+        database backend, and `router.db_for_write` must not depend on mutable
+        instance fields such as `rbac_context` (#42).
         """
-        db = router.db_for_write(self.get_queryset().model)
+        db = router.db_for_write(self.model_for(serializer))
         with transaction.atomic(using=db):
             super().perform_create(serializer)
             persisted = self.persisted_instance(serializer, db)
@@ -152,96 +152,119 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
 
     def perform_update(self, serializer):
         """
-        Save the update, then authorize it against the object as persisted, i.e.
-        after `save()`, custom `Serializer.update()` logic, signals and
-        many-to-many changes. A denial (403) or a reserved context (400) rolls the
-        save back, so moving an object into another context requires permission
-        there as well as in its current context (which `get_object()` checked).
+        Save the update in a transaction on the object's write database, then check
+        the persisted object: a changed primary key or a reserved context is
+        rejected (400) and `check_post_save_permissions` must allow it (403); either
+        rolls the save back.
 
-        The save and the checks run in a transaction on the object's write database
-        (`router.db_for_write`), and the checks use a fresh instance fetched from
-        that database, never a read replica. Relation-based `rbac_contexts` must
-        therefore query the instance's own database, e.g.
-        `self.tags.using(self._state.db)`; otherwise a read router can answer them
-        from a replica that does not see the update. Rolling a denied update back
-        requires a transactional database backend (not e.g. MySQL's MyISAM).
-        `router.db_for_write` for access-controlled models must not depend on
-        mutable instance fields such as `rbac_context`; otherwise the save can be
-        routed to a different database than the transaction and is not rolled
-        back (#42).
-
-        The pre-save object check (`get_object()`) runs outside the transaction, so
-        a concurrent change between it and the save can be overwritten (#43).
-
-        Subclasses overriding `perform_update` **MUST** call `super()`, or updates
-        are only authorized against the object's state before the update. Side
-        effects outside the database (e.g. signal handlers sending email) may run
-        before a denial rolls the save back.
+        Subclasses overriding this **MUST** call `super()`. Requires a transactional
+        database backend, and `router.db_for_write` must not depend on mutable
+        instance fields such as `rbac_context` (#42). Relation-based `rbac_contexts`
+        must query `self._state.db` (e.g. `self.tags.using(self._state.db)`), not
+        the read router. The pre-save `get_object()` check runs outside the
+        transaction, so a concurrent change before the save can be overwritten
+        (#43).
         """
         instance = serializer.instance
         db = router.db_for_write(type(instance), instance=instance)
-        # Defensive: the checks after the save must use the grants the user had
-        # before it, which policy_for caches on the request. Whenever IsAuthorized
-        # is consulted, has_permission() and get_object() have already computed
-        # that cache, so this line is redundant today; it keeps the guarantee for
-        # permission setups that do not call policy_for before the save.
+        pk_before = instance.pk
+        # Not redundant: with e.g. `X | IsAuthorized`, DRF's OR short-circuits at X
+        # before the save, so without this line the first policy_for call would be
+        # the post-save check's, and it would see grants the update itself created
+        # (e.g. the user's own RoleAssignment moved to another context).
         policy_for(self.request)
         with transaction.atomic(using=db):
             super().perform_update(serializer)
+            if serializer.instance.pk != pk_before:
+                raise ValidationError(
+                    "The primary key cannot be changed by an update.",
+                    code="primary_key_changed",
+                )
             persisted = self.persisted_instance(serializer, db)
-            self.check_object_permissions(self.request, persisted)
+            self.check_post_save_permissions(self.request, persisted)
             self.check_not_reserved_context(persisted)
+
+    def model_for(self, serializer):
+        """
+        The model `serializer` saves: its `Meta.model` (what a `ModelSerializer`
+        creates), else the queryset's model.
+        """
+        meta = getattr(serializer, "Meta", None)
+        return getattr(meta, "model", None) or self.get_queryset().model
+
+    def get_post_save_permissions(self):
+        """
+        The permissions `check_post_save_permissions` applies to the saved object:
+        by default every `IsAuthorized` (or subclass) in `get_permissions()`,
+        including those nested in DRF's `&`, `|` and `~`. Other (application)
+        permissions are not re-run against the new state.
+        """
+        return [
+            leaf
+            for permission in self.get_permissions()
+            for leaf in _leaf_permissions(permission)
+            if isinstance(leaf, IsAuthorized)
+        ]
+
+    def check_post_save_permissions(self, request, obj):
+        """
+        Deny (403) unless **every** post-save permission's `has_object_permission`
+        allows the saved `obj`. Composition is ignored, so with `X | IsAuthorized`
+        the destination still needs RBAC permission even when X allowed the
+        request. Does nothing if there are no post-save permissions.
+        """
+        for permission in self.get_post_save_permissions():
+            if not permission.has_object_permission(request, self, obj):
+                self.permission_denied(
+                    request,
+                    message=getattr(permission, "message", None),
+                    code=getattr(permission, "code", None),
+                )
 
     def persisted_instance(self, serializer, db):
         """
-        Return a fresh copy of `serializer.instance` read from `db`, and refresh
-        `serializer.instance` from `db` so the response shows the persisted state.
-
-        A fresh instance, rather than the refreshed one, is returned for the checks
-        because `refresh_from_db` keeps per-instance caches such as a
-        `cached_property` `rbac_contexts`.
+        Refresh `serializer.instance` from `db` (for the response) and return a
+        fresh copy read from `db` (for the checks; it has no per-instance caches).
         """
         instance = serializer.instance
         if instance._state.db != db:
             raise ImproperlyConfigured(
                 f"{type(instance).__name__} was saved to database "
-                f"{instance._state.db!r}, but its write database is {db!r}; the "
-                "update cannot be authorized or rolled back."
+                f"{instance._state.db!r}, but its write database is {db!r}; the save "
+                "cannot be checked or rolled back."
             )
         instance.refresh_from_db(using=db)
         return type(instance)._base_manager.using(db).get(pk=instance.pk)
 
     def contexts_of(self, instance):
         """
-        Return every rbac context `instance` is in: those reported by each
-        permission that defines `contexts_for` (e.g. an `IsAuthorized` subclass
-        overriding it), including permissions nested in DRF's composed permissions
-        (`&`, `|`, `~`), plus the module-level `contexts_for` when the model has
-        `rbac_context`/`rbac_contexts`.
+        Every rbac context of `instance`: its `rbac_context` and `rbac_contexts`
+        (whichever the model has), plus those from the `contexts_for` of any
+        permission (nested ones included) that overrides `IsAuthorized`'s.
         """
         contexts = []
         model = type(instance)
-        if hasattr(model, "rbac_contexts") or hasattr(model, "rbac_context"):
-            contexts.extend(contexts_for(instance))
+        if hasattr(model, "rbac_context"):
+            contexts.append(instance.rbac_context)
+        if hasattr(model, "rbac_contexts"):
+            contexts.extend(instance.rbac_contexts or ())
         for permission in self.get_permissions():
-            for leaf in leaf_permissions(permission):
-                if hasattr(leaf, "contexts_for"):
+            for leaf in _leaf_permissions(permission):
+                leaf_contexts_for = getattr(type(leaf), "contexts_for", None)
+                if leaf_contexts_for not in (None, IsAuthorized.contexts_for):
                     contexts.extend(leaf.contexts_for(instance))
         return contexts
 
     def check_not_reserved_context(self, instance):
         """
-        Raise a `ValidationError` if any of `instance`'s contexts is the reserved
-        `SOME_CONTEXT`, under which every user's grants are also registered. Values
-        that differ from it only by Unicode compatibility form (NFKC), case or
-        surrounding whitespace are rejected too, since a case- or
-        accent-insensitive database collation may treat them as equal.
+        Raise a `ValidationError` (400, code `reserved_rbac_context`) if any of
+        `instance`'s contexts is reserved (starts with `__`, see
+        `_is_reserved_context`).
         """
-        if any(is_reserved_context(c) for c in self.contexts_of(instance)):
+        if any(_is_reserved_context(c) for c in self.contexts_of(instance)):
             raise ValidationError(
-                f"{SOME_CONTEXT!r} is a reserved rbac_context and cannot be assigned "
-                "to an object (this includes values that differ from it only by "
-                "case, whitespace or Unicode compatibility form).",
+                f"rbac contexts starting with {_RESERVED_CONTEXT_PREFIX!r} (such as "
+                f"{SOME_CONTEXT!r}) are reserved and cannot be assigned to an object.",
                 code="reserved_rbac_context",
             )
 

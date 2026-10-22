@@ -16,8 +16,12 @@ from .helpers import (
     MULTI_URL,
     TAGGED,
     TAGGED_URL,
+    UUID_PK,
+    UuidPkViewSet,
     assert_permission_denied,
+    call_view,
     client_for,
+    derived,
     grant,
     multi,
     tagged,
@@ -28,6 +32,7 @@ from .models import (
     ExampleContextTag,
     ExampleDerivedContextModel,
     ExampleFolder,
+    ExampleUuidPkModel,
 )
 
 
@@ -246,3 +251,81 @@ def test_authorized_delete_on_example_model_returns_204(user):
 
     assert response.status_code == 204, response.content
     assert not ExampleAccessControlledModel.objects.filter(pk=target.pk).exists()
+
+
+@pytest.fixture
+def post_save_renames_objects():
+    def handler(sender, instance, **kwargs):
+        if instance.name == "rename":
+            sender.objects.filter(pk=instance.pk).update(name="renamed")
+
+    post_save.connect(handler, sender=ExampleDerivedContextModel, weak=False)
+    yield
+    post_save.disconnect(handler, sender=ExampleDerivedContextModel)
+
+
+@pytest.mark.django_db
+def test_update_response_shows_the_persisted_object(user, post_save_renames_objects):
+    grant(user, {"http.PATCH": [DERIVED]}, "A")
+    target = derived(ctx="A")
+
+    response = client_for(user).patch(
+        DERIVED_URL.format(target.pk), {"name": "rename"}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    assert response.data["name"] == "renamed"
+
+
+# A writable primary key must not let an update write another object's row
+
+
+@pytest.mark.django_db
+def test_patch_changing_primary_key_to_another_object_is_rejected(user):
+    grant(user, {"http.PATCH": [UUID_PK]}, "A")
+    mine = ExampleUuidPkModel.objects.create(name="mine", rbac_context="A")
+    victim = ExampleUuidPkModel.objects.create(name="victim", rbac_context="B")
+
+    response = call_view(
+        UuidPkViewSet, user, "patch", {"id": str(victim.pk), "name": "x"}, pk=mine.pk
+    )
+
+    assert response.status_code == 400, response.content
+    assert [error.code for error in response.data] == ["primary_key_changed"]
+    victim.refresh_from_db()
+    mine.refresh_from_db()
+    assert (victim.name, victim.rbac_context) == ("victim", "B")
+    assert (mine.name, mine.rbac_context) == ("mine", "A")
+
+
+@pytest.mark.django_db
+def test_patch_changing_primary_key_to_a_new_value_is_rejected(user):
+    grant(user, {"http.PATCH": [UUID_PK]}, "A")
+    mine = ExampleUuidPkModel.objects.create(name="mine", rbac_context="A")
+
+    response = call_view(
+        UuidPkViewSet,
+        user,
+        "patch",
+        {"id": "00000000-0000-0000-0000-000000000001", "name": "x"},
+        pk=mine.pk,
+    )
+
+    assert response.status_code == 400, response.content
+    assert list(ExampleUuidPkModel.objects.values_list("pk", "name")) == [
+        (mine.pk, "mine")
+    ]
+
+
+@pytest.mark.django_db
+def test_patch_repeating_the_same_primary_key_is_allowed(user):
+    grant(user, {"http.PATCH": [UUID_PK]}, "A")
+    mine = ExampleUuidPkModel.objects.create(name="mine", rbac_context="A")
+
+    response = call_view(
+        UuidPkViewSet, user, "patch", {"id": str(mine.pk), "name": "x"}, pk=mine.pk
+    )
+
+    assert response.status_code == 200, response.content
+    mine.refresh_from_db()
+    assert mine.name == "x"
