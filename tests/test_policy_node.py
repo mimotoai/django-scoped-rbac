@@ -8,7 +8,9 @@ from scoped_rbac.policy import (
     POLICY_FALSE,
     POLICY_TRUE,
     CompoundPolicy,
+    ConditionResult,
     Decision,
+    Explanation,
     Expression,
     ExpressionList,
     Operator,
@@ -508,3 +510,105 @@ class TestWildcard:
         assert root.should_allow(Permission("GET", "Thing"), "ctx1") is True
         assert root.should_allow(Permission("GET", "Thing"), "__SOME_CONTEXT__")
         assert root.should_allow(Permission("PUT", "Thing"), "ctx1") is False
+
+
+class TestExplain:
+    """`explain` gives the decision and each condition evaluated for it."""
+
+    def test_lists_the_conditions_evaluated_in_order(self, recording_operators):
+        deny = Operator({"operator": "deny"}, message="never")
+        n = node(
+            op("unknown"),
+            x=node(A1, y=node(deny)),
+            **{"*": node(Expression("a == 2", message="a must be 2"))},
+        )
+
+        explanation = n.explain("x", "y", resource={"a": 3})
+
+        assert explanation == Explanation(
+            UNDETERMINED,
+            (
+                ConditionResult(
+                    {"condition": {"operator": "deny"}, "message": "never"},
+                    DENIED,
+                    "never",
+                ),
+                ConditionResult({"condition": "a == 1"}, DENIED, None),
+                ConditionResult(
+                    {"condition": "a == 2", "message": "a must be 2"},
+                    DENIED,
+                    "a must be 2",
+                ),
+                ConditionResult(
+                    {"condition": {"operator": "unknown"}}, UNDETERMINED, None
+                ),
+            ),
+        )
+        assert explanation.decision is n.evaluate("x", "y", resource={"a": 3})
+        assert explanation.to_json() == {
+            "decision": "undetermined",
+            "conditions": [
+                {
+                    "condition": {"operator": "deny"},
+                    "message": "never",
+                    "decision": "denied",
+                },
+                {"condition": "a == 1", "decision": "denied"},
+                {"condition": "a == 2", "message": "a must be 2", "decision": "denied"},
+                {"condition": {"operator": "unknown"}, "decision": "undetermined"},
+            ],
+        }
+
+    def test_stops_at_the_first_allowed(self, recording_operators):
+        n = node(op("boom"), x=node(A1, op("allow")))
+
+        explanation = n.explain("x", resource={"a": 2})
+
+        assert explanation.decision is ALLOWED
+        assert [c.condition for c in explanation.conditions] == [
+            {"condition": "a == 1"},
+            {"condition": {"operator": "allow"}},
+        ]
+        assert [c.decision for c in explanation.conditions] == [DENIED, ALLOWED]
+
+    def test_lists_a_condition_evaluated_twice_once(self):
+        n = node(A1, x=node(A1, Expression("a == 1", message="m")))
+
+        explanation = n.explain("x", resource={})
+
+        assert explanation.conditions == (
+            ConditionResult({"condition": "a == 1"}, UNDETERMINED, None),
+            ConditionResult({"condition": "a == 1", "message": "m"}, UNDETERMINED, "m"),
+        )
+
+    def test_without_conditions(self):
+        assert POLICY_TRUE.explain("x") == Explanation(ALLOWED, ())
+        assert POLICY_FALSE.explain("x") == Explanation(DENIED, ())
+        assert A1.explain(resource={"a": 1}) == Explanation(
+            ALLOWED, (ConditionResult({"condition": "a == 1"}, ALLOWED, None),)
+        )
+
+    def test_raises_as_evaluate_does(self, recording_operators):
+        with pytest.raises(ZeroDivisionError):
+            node(op("boom")).explain()
+
+    def test_root_policy(self):
+        root = RootPolicy().add_json_policy_for_context(
+            [{"DELETE": {"condition": "a == 1", "message": "a must be 1"}}], "ctx"
+        )
+
+        explanation = root.explain(Permission("DELETE", "Thing"), "ctx", {"a": 2})
+
+        assert explanation == Explanation(
+            DENIED,
+            (
+                ConditionResult(
+                    {"condition": "a == 1", "message": "a must be 1"},
+                    DENIED,
+                    "a must be 1",
+                ),
+            ),
+        )
+        assert root.explain(Permission("DELETE", "Thing"), "other") == Explanation(
+            DENIED, ()
+        )

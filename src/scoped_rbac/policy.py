@@ -14,6 +14,7 @@ import json
 import logging
 import warnings
 from collections import namedtuple
+from dataclasses import dataclass
 from types import MappingProxyType
 
 from .cel import compile_expression
@@ -48,6 +49,36 @@ def _decision(value):
     return Decision.ALLOWED if value else Decision.DENIED
 
 
+@dataclass(frozen=True)
+class ConditionResult:
+    """A condition evaluated by :meth:`Policy.explain`: the `condition` as policy
+    JSON (``{"condition": ..., "message": ...}``), its `decision`, and its
+    `message` (or ``None``)."""
+
+    condition: dict
+    decision: Decision
+    message: str | None = None
+
+    def to_json(self):
+        return {**self.condition, "decision": self.decision.value}
+
+
+@dataclass(frozen=True)
+class Explanation:
+    """The result of :meth:`Policy.explain`: the `decision` and the `conditions`
+    (:class:`ConditionResult`) evaluated to reach it, in the order evaluated, each
+    distinct condition once."""
+
+    decision: Decision
+    conditions: tuple = ()
+
+    def to_json(self):
+        return {
+            "decision": self.decision.value,
+            "conditions": [c.to_json() for c in self.conditions],
+        }
+
+
 class Policy:
     """Base class of policies: :class:`PolicyNode` and the conditions
     :class:`Expression` and :class:`Operator`."""
@@ -60,6 +91,10 @@ class Policy:
     def should_allow(self, *keys, resource=None):
         """``True`` if, and only if, :meth:`evaluate` is ``ALLOWED``."""
         return self.evaluate(*keys, resource=resource) is Decision.ALLOWED
+
+    def explain(self, *keys, resource=None):
+        """The :class:`Explanation` of :meth:`evaluate`'s decision."""
+        return as_node(self).explain(*keys, resource=resource)
 
     def sum_with(self, other_policy):
         """A new policy allowing what either this or `other_policy` allows."""
@@ -263,25 +298,44 @@ class PolicyNode(Policy):
         return not (self.allow_all or self.children or self.conditions)
 
     def evaluate(self, *keys, resource=None):
-        return self._evaluate(keys, resource)
+        return self._evaluate(keys, resource, None)
+
+    def explain(self, *keys, resource=None):
+        evaluated = []
+        decision = self._evaluate(keys, resource, evaluated)
+        results = []
+        seen = []
+        for condition, condition_decision in evaluated:
+            if condition not in seen:
+                seen.append(condition)
+                results.append(
+                    ConditionResult(
+                        condition.to_json(), condition_decision, condition.message
+                    )
+                )
+        return Explanation(decision, tuple(results))
 
     def _children_for(self, key):
         """The children that match `key`: its own, then the one for any key."""
         keys = (key,) if key == ANY else (key, ANY)
         return tuple(self.children[k] for k in keys if k in self.children)
 
-    def _evaluate(self, keys, resource):
+    def _evaluate(self, keys, resource, evaluated):
+        """Evaluate, appending each (condition, decision) to `evaluated` unless it
+        is None."""
         if self.allow_all:
             return Decision.ALLOWED
         undetermined = False
         if keys:
             for child in self._children_for(keys[0]):
-                decision = child._evaluate(keys[1:], resource)
+                decision = child._evaluate(keys[1:], resource, evaluated)
                 if decision is Decision.ALLOWED:
                     return decision
                 undetermined = undetermined or decision is Decision.UNDETERMINED
         for condition in self.conditions:
             decision = condition.evaluate_condition(resource)
+            if evaluated is not None:
+                evaluated.append((condition, decision))
             if decision is Decision.ALLOWED:
                 return decision
             undetermined = undetermined or decision is Decision.UNDETERMINED
@@ -609,6 +663,11 @@ class RootPolicy:
     def should_allow(self, permission, context_id, resource=None):
         """``True`` if, and only if, :meth:`evaluate` is ``ALLOWED``."""
         return self.evaluate(permission, context_id, resource) is Decision.ALLOWED
+
+    def explain(self, permission, context_id, resource=None):
+        """The :class:`Explanation` of :meth:`evaluate`'s decision: it and every
+        condition evaluated to reach it, with its decision and message."""
+        return self.policy.explain(context_id, *permission, resource=resource)
 
     def add_json_policy_for_context(self, json_policy, context):
         return self.add_policy_for_context(policy_from_json(json_policy), context)
