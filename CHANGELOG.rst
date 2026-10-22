@@ -20,8 +20,9 @@ v0.9.2
   names when a settings default's top-level condition is combined with context
   grants (roles, staff defaults or several settings sources), instead of raising;
   such conditions are ignored when filtering, so objects allowed only by them are
-  not returned (404 on retrieve). A default that is only a top-level condition is
-  still unfiltered (#5).
+  not returned (404 on retrieve). A settings default given as a ``CompoundPolicy``
+  instance, which 0.9.1 left unfiltered, is likewise filtered to the contexts it
+  names. A default that is only a top-level condition is still unfiltered (#5).
 
 v0.9.1
 ====================
