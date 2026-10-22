@@ -403,12 +403,21 @@ def as_node(policy):
 
 def condition_from_json(json_condition):
     """The condition for a condition dict ``{"condition": <CEL string or operator
-    configuration>, "message": ...}`` (the message is optional)."""
-    value = json_condition["condition"]
-    message = json_condition.get("message")
-    if isinstance(value, dict) and "operator" in value:
-        return Operator(value, message)
-    return Expression(value, message)
+    configuration>, "message": <string>}`` (the message is optional). Raises
+    ``ValueError`` for anything else."""
+    if (
+        isinstance(json_condition, dict)
+        and "condition" in json_condition
+        and set(json_condition) <= {"condition", "message"}
+        and isinstance(json_condition.get("message", ""), str)
+    ):
+        value = json_condition["condition"]
+        message = json_condition.get("message")
+        if isinstance(value, str):
+            return Expression(value, message)
+        if isinstance(value, dict) and isinstance(value.get("operator"), str):
+            return Operator(value, message)
+    raise ValueError(f"Invalid condition {json_condition!r}")
 
 
 # Deprecated constructors of the node classes before 0.10. Each returns the
@@ -684,7 +693,29 @@ class RootPolicy:
         return f"RootPolicy {repr(self.policy)}"
 
     def to_json(self):
-        return self.policy.to_json()
+        """The policy in the wire format, e.g. for a client to evaluate it.
+
+        An object keyed by context, whose values are objects keyed by action IRI,
+        whose values are objects keyed by resource type IRI, whose values (leaves)
+        are ``true`` (allowed) or ``{"conditions": [<condition>, ...]}`` (allowed
+        if any condition is). A condition is as in policy JSON:
+        ``{"condition": <CEL string or operator configuration>}``, with an optional
+        ``"message"``. At each level the key :data:`ANY` (``"*"``) applies to every
+        name, in addition to the name's own key: a grant or condition that applies
+        whatever the remaining keys is under a chain of ``"*"`` keys. Leaves that
+        grant nothing, and then empty objects, are left out; keys are sorted.
+
+        For example, a superuser's policy is ``{"*": {"*": {"*": true}}}``.
+        """
+        return _wire_json(_wire_node(self.policy, 0), 0)
+
+    @classmethod
+    def from_json(cls, wire):
+        """The RootPolicy for :meth:`to_json`'s wire format. Raises ``ValueError``
+        if `wire` is not in that format."""
+        root = cls()
+        root.policy = _node_from_wire(wire, ())
+        return root
 
     def get_contexts_for(self, permission):
         """The contexts a GET list is restricted to, or ``None`` for no
@@ -697,3 +728,73 @@ class RootPolicy:
         if ANY in self.policy.children:
             return None
         return list(self.policy.children)
+
+
+WIRE_DEPTH = 3
+"""The keys of a request in the wire format: context, action IRI, resource type
+IRI."""
+
+
+def _any_chain(leaf, depth):
+    """A node at `depth` whose chain of :data:`ANY` keys leads to `leaf` at
+    :data:`WIRE_DEPTH`."""
+    if depth == WIRE_DEPTH:
+        return leaf
+    return PolicyNode(children={ANY: _any_chain(leaf, depth + 1)})
+
+
+def _wire_node(node, depth):
+    """`node` at `depth` with what the wire format holds: allow-all and conditions
+    only at :data:`WIRE_DEPTH`, those of a node above it moved down the
+    :data:`ANY` chain (after the grants of its :data:`ANY` child, so that the order
+    of evaluation is kept), no children below it, and no empty nodes."""
+    if depth == WIRE_DEPTH:
+        return PolicyNode(node.allow_all, {}, node.conditions)
+    children = {
+        key: _wire_node(child, depth + 1) for key, child in node.children.items()
+    }
+    own = PolicyNode(node.allow_all, {}, node.conditions)
+    if not own.is_empty:
+        chain = _any_chain(own, depth + 1)
+        children[ANY] = children[ANY].sum_with(chain) if ANY in children else chain
+    return PolicyNode(
+        children={key: child for key, child in children.items() if not child.is_empty}
+    )
+
+
+def _wire_json(node, depth):
+    if depth == WIRE_DEPTH:
+        if node.allow_all:
+            return True
+        return {"conditions": [condition.to_json() for condition in node.conditions]}
+    return {
+        key: _wire_json(node.children[key], depth + 1) for key in sorted(node.children)
+    }
+
+
+def _node_from_wire(wire, path):
+    def invalid(reason):
+        raise ValueError(f"Invalid policy wire format at {list(path)}: {reason}")
+
+    if len(path) == WIRE_DEPTH:
+        if wire is True:
+            return POLICY_TRUE
+        if not (isinstance(wire, dict) and set(wire) == {"conditions"}):
+            invalid('a leaf must be true or {"conditions": [...]}')
+        if not isinstance(wire["conditions"], list):
+            invalid("conditions must be a list")
+        try:
+            return PolicyNode(
+                conditions=[condition_from_json(c) for c in wire["conditions"]]
+            )
+        except ValueError as e:
+            invalid(str(e))
+    if not isinstance(wire, dict):
+        invalid("expected an object")
+    if not all(isinstance(key, str) for key in wire):
+        invalid("keys must be strings")
+    return PolicyNode(
+        children={
+            key: _node_from_wire(value, (*path, key)) for key, value in wire.items()
+        }
+    )

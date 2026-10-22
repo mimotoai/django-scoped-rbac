@@ -454,7 +454,7 @@ class TestMessages:
         )
         assert with_message.sum_with(with_message) == with_message
         root = RootPolicy().add_policy_for_context(merged, "ctx")
-        assert root.to_json()["children"]["ctx"]["children"]["DELETE"] == {
+        assert root.to_json()["ctx"]["DELETE"]["*"] == {
             "conditions": [
                 {"condition": "a == 1", "message": "a must be 1"},
                 {"condition": "a == 1", "message": "other"},

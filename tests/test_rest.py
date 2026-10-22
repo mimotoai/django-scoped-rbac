@@ -159,13 +159,12 @@ def test_list_filtering(superuser, editor_user):
     And.role_list_does_not_contain(role_in_context2_url)
 
 
-def node_json_of_grants(definition):
-    """The node JSON of a role `definition` of the form {action: [resource type]}."""
+def wire_json_of_grants(definition):
+    """The policy wire format of a role `definition` of the form
+    {action: [resource type]}."""
     return {
-        "children": {
-            action: {"children": {resource_type: True for resource_type in grants}}
-            for action, grants in sorted(definition.items())
-        }
+        action: {resource_type: True for resource_type in grants}
+        for action, grants in definition.items()
     }
 
 
@@ -175,7 +174,7 @@ def test_get_user_rbac_policy(superuser, editor_user):
     Given.http.force_authenticate(user=superuser.instance)
     When.get_user_rbac_policy()
     Then.http.status_code_is(200)
-    And.http.response_json_is(True)
+    And.http.response_json_is({"*": {"*": {"*": True}}})
 
     # TODO more comprehensive testing
     context1_name = fake.pystr(min_chars=10, max_chars=20)
@@ -198,10 +197,8 @@ def test_get_user_rbac_policy(superuser, editor_user):
     And.get_user_rbac_policy()
     Then.http.response_json_is(
         {
-            "children": {
-                context: node_json_of_grants(role_in_context1_json["definition"])
-                for context in sorted([context1_name, context2_name, SOME_CONTEXT])
-            }
+            context: wire_json_of_grants(role_in_context1_json["definition"])
+            for context in (context1_name, context2_name, SOME_CONTEXT)
         }
     )
 
@@ -211,7 +208,12 @@ def test_get_user_rbac_policy(superuser, editor_user):
 def test_get_unauthenticated_user_policy():
     When.get_user_rbac_policy()
     Then.http.status_code_is(200)
-    assert http_response.data is not None
+    # tests.policy.policy_for_unauthenticated, also granted in SOME_CONTEXT.
+    grants = {
+        "http.GET": {"rbac.ExampleAccessControlledModel": True},
+        "http.POST": {"rbac.ExampleAccessControlledModel": True},
+    }
+    And.http.response_json_is({"": grants, SOME_CONTEXT: grants})
 
 
 @pytest.mark.django_db
