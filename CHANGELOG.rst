@@ -10,10 +10,14 @@ v0.9.2
 **Fixed:**
 
 * Merging roles whose grants combine conditional and unconditional permissions no
-  longer raises, and merge results no longer depend on the order roles are combined
-  (#2, #3).
-* Merging policies of a type ``sum_with`` cannot combine raises
-  ``NotImplementedError`` instead of returning ``None``.
+  longer raises, and which grants a merge allows no longer depends on the order
+  roles are combined (#2, #3).
+* ``sum_with`` on ``Expression``, ``Operator``, ``ExpressionList`` and
+  ``CompoundPolicy`` raises ``NotImplementedError`` for a value it cannot merge,
+  instead of returning ``None`` (as ``PolicySet`` and ``PolicyDict`` already did).
+* List filtering no longer returns unfiltered results when a settings default
+  policy contains a context-level condition and the user also has role grants; such
+  conditions are ignored for list filtering (#2).
 
 v0.9.1
 ====================
