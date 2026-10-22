@@ -6,7 +6,7 @@ import pytest
 from django.db.models.signals import post_save
 from django.utils.http import http_date, quote_etag
 from django.utils.timezone import now
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 from scrudful import __version__ as scrudful_version
@@ -15,7 +15,7 @@ from scoped_rbac.models import Role, RoleAssignment
 from scoped_rbac.permissions import IsAuthorized, policy_for
 from scoped_rbac.policy import Permission
 from scoped_rbac.rbac_contexts import SOME_CONTEXT
-from scoped_rbac.rest import RoleAssignmentViewSet
+from scoped_rbac.rest import AccessControlledModelViewSet, RoleAssignmentViewSet
 
 from .models import (
     ExampleAccessControlledModel,
@@ -23,9 +23,11 @@ from .models import (
     ExampleContextTag,
     ExampleDerivedContextModel,
     ExampleFolder,
+    ExampleProjectModel,
     ExampleTaggedContextsModel,
     ExampleWithMultipleContexts,
 )
+from .serializers import ExampleProjectModelSerializer
 
 RA = "rbac.RoleAssignment"
 ROLE = "rbac.Role"
@@ -751,3 +753,103 @@ def test_authorized_delete_on_example_model_returns_204(user):
 
     assert response.status_code == 204, response.content
     assert not ExampleAccessControlledModel.objects.filter(pk=target.pk).exists()
+
+
+# contexts_for overrides nested in DRF's composed permissions (&, |, ~)
+
+
+class ProjectIsAuthorized(IsAuthorized):
+    """The object's (and the request body's) context is its `project`."""
+
+    def contexts_for(self, obj):
+        return [obj.project]
+
+    def contexts_from(self, view, content):
+        return [content.get("project", "")]
+
+
+class DenyAll(BasePermission):
+    def has_permission(self, request, view):
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        return False
+
+
+class ProjectViewSet(AccessControlledModelViewSet):
+    queryset = ExampleProjectModel.objects.all()
+    serializer_class = ExampleProjectModelSerializer
+    resource_type_iri = ExampleProjectModel.resource_type.iri
+    permission_classes = [ProjectIsAuthorized]
+
+
+PROJECT_PERMISSIONS = {
+    "plain": [ProjectIsAuthorized],
+    "and": [ProjectIsAuthorized & IsAuthenticated],
+    "not-not": [~~ProjectIsAuthorized],
+    "or": [ProjectIsAuthorized | DenyAll],
+}
+
+
+@pytest.fixture(params=sorted(PROJECT_PERMISSIONS))
+def project_view(request):
+    viewset = type(
+        "ProjectViewSet",
+        (ProjectViewSet,),
+        {"permission_classes": PROJECT_PERMISSIONS[request.param]},
+    )
+
+    def call(user, method, data, pk=None):
+        action = {"patch": "partial_update", "post": "create"}[method]
+        factory_request = getattr(APIRequestFactory(), method)("/", data, format="json")
+        force_authenticate(factory_request, user=user)
+        kwargs = {} if pk is None else {"pk": str(pk)}
+        return viewset.as_view({method: action})(factory_request, **kwargs).render()
+
+    return call
+
+
+PROJECT = ExampleProjectModel.resource_type.iri
+
+
+@pytest.mark.django_db
+def test_patch_into_reserved_context_via_composed_permission_is_rejected(
+    user, project_view
+):
+    grant(user, {"http.PATCH": [PROJECT]}, "A")
+    target = ExampleProjectModel.objects.create(project="A")
+
+    response = project_view(user, "patch", {"project": SOME_CONTEXT}, pk=target.pk)
+
+    assert_reserved_context_rejected(response)
+    target.refresh_from_db()
+    assert target.project == "A"
+
+
+@pytest.mark.django_db
+def test_post_into_reserved_context_via_composed_permission_is_rejected(
+    user, project_view
+):
+    grant(user, {"http.POST": [PROJECT]}, "A")
+
+    response = project_view(user, "post", {"project": SOME_CONTEXT})
+
+    assert_reserved_context_rejected(response)
+    assert not ExampleProjectModel.objects.exists()
+
+
+@pytest.mark.django_db
+def test_patch_and_post_into_granted_context_via_composed_permission_are_allowed(
+    user, project_view
+):
+    grant(user, {"http.PATCH": [PROJECT], "http.POST": [PROJECT]}, "A", "B")
+    target = ExampleProjectModel.objects.create(project="A")
+
+    patched = project_view(user, "patch", {"project": "B"}, pk=target.pk)
+    created = project_view(user, "post", {"project": "A"})
+
+    assert patched.status_code == 200, patched.content
+    assert created.status_code == 201, created.content
+    target.refresh_from_db()
+    assert target.project == "B"
+    assert ExampleProjectModel.objects.filter(project="A").count() == 1

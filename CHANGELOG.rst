@@ -30,7 +30,8 @@ Unreleased
   normalisation, case folding and stripping whitespace (e.g.
   ``__some_context__``) are rejected too, since a case- or accent-insensitive
   collation could treat them as the same context. The contexts checked include
-  those reported by the view's permission classes' ``contexts_for``.
+  those reported by the ``contexts_for`` of the view's permission classes,
+  including classes nested in DRF's composed permissions (``&``, ``|``, ``~``).
 * ``IsAuthorized`` now checks objects with multiple ``rbac_contexts`` against each
   of their contexts instead of failing; an object with no contexts is denied.
 * ``PATCH`` on ``RoleViewSet`` no longer raises ``TypeError``.
@@ -41,6 +42,11 @@ Unreleased
   or ``perform_create`` must call ``super()``, or these checks are skipped.
 * Rolling back a denied update requires a transactional database backend; with
   e.g. MySQL's MyISAM the 403 is returned but the write remains.
+* ``router.db_for_write`` for access-controlled models must not depend on mutable
+  instance fields such as ``rbac_context``. Otherwise a save can be routed to a
+  different database than the transaction and is not rolled back (#42).
+* The pre-save object check runs outside the transaction, so a concurrent change
+  between it and the save can be overwritten (#43).
 * Side effects outside the database, such as signal handlers sending email, may run
   before a denied update is rolled back.
 * Models whose ``rbac_contexts`` come from relations should query the instance's

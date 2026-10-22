@@ -105,3 +105,15 @@ class ExampleCachedContextsModel(ScopedRbacTestModel, models.Model):
     @cached_property
     def rbac_contexts(self):
         return [tag.ctx for tag in self.tags.using(self._state.db)]
+
+
+class ExampleProjectModel(ScopedRbacTestModel, models.Model):
+    """No `rbac_context(s)`: its context comes from a permission's `contexts_for`."""
+
+    project = models.CharField(max_length=128, blank=True)
+
+    resource_type = ResourceType(
+        "rbac.ExampleProjectModel",
+        "ExampleProjectModel",
+        "An example model whose context is its project, via a permission class.",
+    )

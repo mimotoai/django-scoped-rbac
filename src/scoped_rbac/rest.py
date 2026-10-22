@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AND, NOT, OR, AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView
@@ -33,6 +33,26 @@ _RESERVED_CONTEXT = _normalize_context(SOME_CONTEXT)
 def is_reserved_context(context):
     """True if `context` is, or is a lookalike of, the reserved `SOME_CONTEXT`."""
     return isinstance(context, str) and _normalize_context(context) == _RESERVED_CONTEXT
+
+
+def leaf_permissions(permission):
+    """
+    Yield the permissions composed into `permission` by DRF's `&`, `|` and `~`
+    (`AND`, `OR`, `NOT`), or `permission` itself if it is not composed.
+
+    The operands are read from the undocumented `op1`/`op2` attributes; if a DRF
+    version lacks them, the composed permission contributes nothing.
+    """
+    if isinstance(permission, (AND, OR)):
+        operands = (getattr(permission, "op1", None), getattr(permission, "op2", None))
+    elif isinstance(permission, NOT):
+        operands = (getattr(permission, "op1", None),)
+    else:
+        yield permission
+        return
+    for operand in operands:
+        if operand is not None:
+            yield from leaf_permissions(operand)
 
 
 class DefaultPageNumberPagination(PageNumberPagination):
@@ -117,6 +137,11 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         in the reserved `SOME_CONTEXT`. The save and the check run in a transaction
         on the model's write database (`router.db_for_write`).
 
+        `router.db_for_write` for access-controlled models must not depend on
+        mutable instance fields such as `rbac_context`; otherwise the save can be
+        routed to a different database than the transaction and is not rolled
+        back (#42).
+
         Subclasses overriding `perform_create` **MUST** call `super()`.
         """
         db = router.db_for_write(self.get_queryset().model)
@@ -140,6 +165,13 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
         `self.tags.using(self._state.db)`; otherwise a read router can answer them
         from a replica that does not see the update. Rolling a denied update back
         requires a transactional database backend (not e.g. MySQL's MyISAM).
+        `router.db_for_write` for access-controlled models must not depend on
+        mutable instance fields such as `rbac_context`; otherwise the save can be
+        routed to a different database than the transaction and is not rolled
+        back (#42).
+
+        The pre-save object check (`get_object()`) runs outside the transaction, so
+        a concurrent change between it and the save can be overwritten (#43).
 
         Subclasses overriding `perform_update` **MUST** call `super()`, or updates
         are only authorized against the object's state before the update. Side
@@ -182,20 +214,19 @@ class AccessControlledModelViewSet(AccessControlledAPIView, ModelViewSet):
     def contexts_of(self, instance):
         """
         Return every rbac context `instance` is in: those reported by each
-        permission class that defines `contexts_for` (e.g. an `IsAuthorized`
-        subclass overriding it), plus the module-level `contexts_for` when the
-        model has `rbac_context`/`rbac_contexts`.
-
-        Permission classes nested in DRF's composed permissions (`&`, `|`, `~`) are
-        not inspected, so their `contexts_for` overrides are not consulted here.
+        permission that defines `contexts_for` (e.g. an `IsAuthorized` subclass
+        overriding it), including permissions nested in DRF's composed permissions
+        (`&`, `|`, `~`), plus the module-level `contexts_for` when the model has
+        `rbac_context`/`rbac_contexts`.
         """
         contexts = []
         model = type(instance)
         if hasattr(model, "rbac_contexts") or hasattr(model, "rbac_context"):
             contexts.extend(contexts_for(instance))
         for permission in self.get_permissions():
-            if hasattr(permission, "contexts_for"):
-                contexts.extend(permission.contexts_for(instance))
+            for leaf in leaf_permissions(permission):
+                if hasattr(leaf, "contexts_for"):
+                    contexts.extend(leaf.contexts_for(instance))
         return contexts
 
     def check_not_reserved_context(self, instance):

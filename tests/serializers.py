@@ -10,6 +10,7 @@ from .models import (
     ExampleAccessControlledModel,
     ExampleCachedContextsModel,
     ExampleDerivedContextModel,
+    ExampleProjectModel,
     ExampleTaggedContextsModel,
     ExampleWithMultipleContexts,
 )
@@ -221,3 +222,9 @@ class ExampleCachedContextsModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExampleCachedContextsModel
         fields = ("id", "tags")
+
+
+class ExampleProjectModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExampleProjectModel
+        fields = ("id", "project")
