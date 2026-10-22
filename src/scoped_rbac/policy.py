@@ -1,12 +1,23 @@
 """
-RBAC Policies, with stubbed-out support for conditional expressions.
+RBAC policies.
+
+A policy is a tree of :class:`PolicyNode` objects. Each node may allow everything
+below it (``allow_all``), has named ``children`` that are followed by the keys of a
+request (context, then action IRI, then resource type IRI), and has ``conditions``
+(:class:`Expression` or :class:`Operator`) that are evaluated against the resource.
+Policies are immutable; merging two (:meth:`Policy.sum_with`) is a logical OR that
+returns a new policy.
 """
 
+import enum
 import json
 import logging
+import warnings
 from collections import namedtuple
+from types import MappingProxyType
 
-from .cel import compile_expression, is_true
+from .cel import compile_expression
+from .cel import evaluate as evaluate_cel
 from .conf import operators
 
 logger = logging.getLogger(__name__)
@@ -15,12 +26,40 @@ logger = logging.getLogger(__name__)
 Permission = namedtuple("Permission", "action, resource_type")
 
 
+class Decision(enum.Enum):
+    """The outcome of evaluating a policy. ``UNDETERMINED`` means that a condition
+    could not be decided, e.g. because the resource lacks a value it refers to.
+    Only ``ALLOWED`` allows a request.
+    """
+
+    ALLOWED = "allowed"
+    DENIED = "denied"
+    UNDETERMINED = "undetermined"
+
+
+def _decision(value):
+    """The :class:`Decision` for ``True``, ``False`` or ``None`` (undetermined)."""
+    if value is None:
+        return Decision.UNDETERMINED
+    return Decision.ALLOWED if value else Decision.DENIED
+
+
 class Policy:
-    def should_allow(self, *args, **kwargs):
+    """Base class of policies: :class:`PolicyNode` and the conditions
+    :class:`Expression` and :class:`Operator`."""
+
+    def evaluate(self, *keys, resource=None):
+        """The :class:`Decision` for a request named by `keys` (context, action IRI,
+        resource type IRI) on `resource`."""
         raise NotImplementedError()
 
+    def should_allow(self, *keys, resource=None):
+        """``True`` if, and only if, :meth:`evaluate` is ``ALLOWED``."""
+        return self.evaluate(*keys, resource=resource) is Decision.ALLOWED
+
     def sum_with(self, other_policy):
-        raise NotImplementedError()
+        """A new policy allowing what either this or `other_policy` allows."""
+        return as_node(self).sum_with(other_policy)
 
     def __repr__(self):
         raise NotImplementedError()
@@ -29,50 +68,65 @@ class Policy:
         raise NotImplementedError()
 
 
-class PolicyBoolean(Policy): ...
-
-
-class PolicyTrue(PolicyBoolean):
-    def should_allow(self, *args, **kwargs):
-        return True
-
-    def sum_with(self, other_policy):
-        return self
-
-    def __repr__(self):
-        return "PolicyTrue"
-
-    def to_json(self):
-        return True
-
-
-class PolicyFalse(PolicyBoolean):
-    def should_allow(self, *args, **kwargs):
-        return False
-
-    def sum_with(self, other_policy):
-        return other_policy
-
-    def __repr__(self):
-        return "PolicyFalse"
-
-    def to_json(self):
-        return False
-
-
-POLICY_TRUE = PolicyTrue()
-POLICY_FALSE = PolicyFalse()
-
-
-class Expression(Policy):
-    """
-    Expression policies are initialized with a `dict` detailing the parameters
-    to use in evaluating the expression to determine whether the policy
-    conditions are met.
+class Condition(Policy):
+    """A condition on the resource: an :class:`Expression` or an :class:`Operator`,
+    with an optional `message` describing it (e.g. for a client to show when it
+    is not met). As a policy it applies whatever the keys of the request.
     """
 
-    def __init__(self, expression):
+    message = None
+
+    def evaluate(self, *keys, resource=None):
+        return self.evaluate_condition(resource)
+
+    def evaluate_condition(self, resource):
+        raise NotImplementedError()
+
+    def condition_json(self):
+        """The value of the ``"condition"`` key of :meth:`to_json`."""
+        raise NotImplementedError()
+
+    def to_json(self):
+        """The condition as in policy JSON: ``{"condition": ...}``, with its
+        ``"message"`` if it has one."""
+        json_condition = {"condition": self.condition_json()}
+        if self.message is not None:
+            json_condition["message"] = self.message
+        return json_condition
+
+    def _identity(self):
+        raise NotImplementedError()
+
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return self._identity() == other._identity()
+
+    def __hash__(self):
+        value = self._identity()[0]
+        return hash((type(self).__name__, value if isinstance(value, str) else None))
+
+
+def _condition_parts(json_condition, value_type):
+    """`json_condition` as (value, message): either a bare value of `value_type` or
+    a condition dict ``{"condition": value, "message": ...}``."""
+    if isinstance(json_condition, dict) and "condition" in json_condition:
+        return json_condition["condition"], json_condition.get("message")
+    if isinstance(json_condition, value_type):
+        return json_condition, None
+    raise ValueError(f"Invalid condition {json_condition!r}")
+
+
+class Expression(Condition):
+    """A CEL expression condition (see :mod:`scoped_rbac.cel`). It is allowed when
+    the expression is ``true`` for the resource, denied when ``false``, and
+    undetermined when it cannot be evaluated (such as a missing value) or is not a
+    boolean.
+    """
+
+    def __init__(self, expression, message=None):
         self.expression = expression
+        self.message = message
         self.compiled_expression_ = None
 
     @property
@@ -81,35 +135,41 @@ class Expression(Policy):
             self.compiled_expression_ = compile_expression(self.expression)
         return self.compiled_expression_
 
-    def should_allow(self, *args, resource=None, **kwargs):
-        """Expects `resource` to be a mapping or have a `to_cel()` method returning one"""
+    def evaluate_condition(self, resource):
+        """Expects `resource` to be a mapping, ``None``, or have a ``to_cel()``
+        method returning a mapping."""
         if hasattr(resource, "to_cel"):
             resource = resource.to_cel()
-        return is_true(self.compiled_expression, resource)
+        return _decision(evaluate_cel(self.compiled_expression, resource))
 
-    def sum_with(self, other_policy):
-        return _sum_condition_with(self, other_policy)
+    def condition_json(self):
+        return self.expression
+
+    def _identity(self):
+        return (self.expression, self.message)
 
     def __repr__(self):
-        return f"Expression {repr(self.expression)}"
-
-    def to_json(self):
-        return self.expression
+        if self.message is None:
+            return f"Expression {self.expression!r}"
+        return f"Expression {self.expression!r} message={self.message!r}"
 
     @classmethod
     def from_json(cls, json_policy):
-        return Expression(json_policy)
+        """An Expression from a CEL string or a condition dict."""
+        return cls(*_condition_parts(json_policy, str))
 
 
-class Operator(Policy):
+class Operator(Condition):
+    """A condition evaluated by a registered operator function (see
+    :func:`scoped_rbac.conf.operators`), configured by a dict whose ``"operator"``
+    key names it. The function is called as ``function(resource, configuration)``:
+    a result of ``None`` is undetermined, otherwise a truthy result allows and a
+    falsy one denies.
     """
-    Expression policies are initialized with a `dict` detailing the parameters
-    to use in evaluating the expression to determine whether the policy
-    conditions are met.
-    """
 
-    def __init__(self, configuration):
+    def __init__(self, configuration, message=None):
         self.configuration = configuration
+        self.message = message
         self.operator_name = configuration.get("operator", None)
         self.operator = None
 
@@ -117,261 +177,243 @@ class Operator(Policy):
     def resolved_operator(self):
         return operators().get(self.operator_name)
 
-    def should_allow(self, *args, resource=None, **kwargs):
-        return self.resolved_operator(resource, self.configuration)
+    def evaluate_condition(self, resource):
+        return _decision(self.resolved_operator(resource, self.configuration))
 
-    def sum_with(self, other_policy):
-        return _sum_condition_with(self, other_policy)
+    def condition_json(self):
+        return self.configuration
+
+    def _identity(self):
+        return (self.operator_name, self.configuration, self.message)
 
     def __repr__(self):
-        return json.dumps(self.configuration)
-
-    def to_json(self):
-        return self.expression
+        if self.message is None:
+            return json.dumps(self.configuration)
+        return f"{json.dumps(self.configuration)} message={self.message!r}"
 
     @classmethod
     def from_json(cls, json_policy):
-        return Expression(json_policy)
+        """An Operator from its configuration dict or a condition dict."""
+        return cls(*_condition_parts(json_policy, dict))
 
 
-def _sum_condition_with(condition, other_policy):
-    """Merge an `Expression` or `Operator` `condition` with `other_policy`."""
-    if isinstance(other_policy, PolicyBoolean):
-        return other_policy.sum_with(condition)
-    if isinstance(other_policy, (Expression, Operator)):
-        return ExpressionList(condition, other_policy)
-    if isinstance(other_policy, ExpressionList):
-        return ExpressionList(condition, *other_policy.expressions)
-    if isinstance(other_policy, PolicySet):
-        return CompoundPolicy(
-            policy_set=other_policy, expressions=ExpressionList(condition)
-        )
-    if isinstance(other_policy, PolicyDict):
-        return CompoundPolicy(
-            policy_dict=other_policy, expressions=ExpressionList(condition)
-        )
-    if isinstance(other_policy, CompoundPolicy):
-        return other_policy.add_expression(condition)
-    raise NotImplementedError(f"Unsupported type {type(other_policy)}")
+def _without_duplicates(conditions):
+    unique = []
+    for condition in conditions:
+        if not isinstance(condition, Condition):
+            raise TypeError(f"Not a condition: {condition!r}")
+        if condition not in unique:
+            unique.append(condition)
+    return tuple(unique)
 
 
-class ExpressionList(Policy):
-    def __init__(self, *args):
-        self.expressions = args
+class PolicyNode(Policy):
+    """The policy node. Immutable.
 
-    def should_allow(self, *args, **kwargs):
-        for expression in self.expressions:
-            if expression.should_allow(*args, **kwargs):
-                return True
-        return False
+    - `allow_all`: allow every request that reaches this node. Such a node has no
+      children or conditions (they would allow nothing more).
+    - `children`: a read-only mapping of key to the node for requests whose next
+      key it is.
+    - `conditions`: a tuple of distinct conditions, any one of which allows.
 
-    def sum_with(self, other_policy):
-        if isinstance(other_policy, PolicyBoolean):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, (Expression, Operator)):
-            return self.add(other_policy)
-        if isinstance(other_policy, ExpressionList):
-            return ExpressionList(*self.expressions, *other_policy.expressions)
-        if isinstance(other_policy, PolicySet):
-            return CompoundPolicy(policy_set=other_policy, expressions=self)
-        if isinstance(other_policy, PolicyDict):
-            return CompoundPolicy(policy_dict=other_policy, expressions=self)
-        if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_expression_list(self)
-        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
+    Evaluating a node for `keys` and a resource (Kleene OR, in this order, stopping
+    at the first ``ALLOWED``): ``ALLOWED`` if `allow_all`; then the child for
+    ``keys[0]`` evaluated for the remaining keys; then each condition. Otherwise
+    ``UNDETERMINED`` if any of those was, else ``DENIED``.
+    """
 
-    def add(self, expression):
-        return ExpressionList(expression, *self.expressions)
+    __slots__ = ("allow_all", "children", "conditions")
 
-    def __repr__(self):
-        return f"ExpressionList [ {', '.join([repr(expr) for expr in self.expressions])}  ]"
+    def __init__(self, allow_all=False, children=None, conditions=()):
+        allow_all = bool(allow_all)
+        if allow_all:
+            children, conditions = {}, ()
+        children = {key: as_node(child) for key, child in (children or {}).items()}
+        object.__setattr__(self, "allow_all", allow_all)
+        object.__setattr__(self, "children", MappingProxyType(children))
+        object.__setattr__(self, "conditions", _without_duplicates(conditions))
 
-    def to_json(self):
-        return [expr.to_json() for expr in self.expressions]
+    def __setattr__(self, name, value):
+        raise AttributeError(f"{type(self).__name__} is immutable")
 
-    @classmethod
-    def from_json(cls, json_policy):
-        return ExpressionList(*[Expression.from_json(item) for item in json_policy])
+    def __delattr__(self, name):
+        raise AttributeError(f"{type(self).__name__} is immutable")
 
-
-class PolicySet(Policy):
-    def __init__(self, *args):
-        self.allowed = set(args)
-
-    def should_allow(self, *args, **kwargs):
-        if len(args) == 0:
-            return False
-        key = args[0]
-        return key in self.allowed
-
-    def sum_with(self, other_policy):
-        if (
-            isinstance(other_policy, PolicyBoolean)
-            or isinstance(other_policy, Expression)
-            or isinstance(other_policy, Operator)
-            or isinstance(other_policy, ExpressionList)
-        ):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, PolicySet):
-            return PolicySet(*self.allowed.union(other_policy.allowed))
-        if isinstance(other_policy, PolicyDict):
-            return other_policy.add_all([(key, POLICY_TRUE) for key in self.allowed])
-        if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_policy_set(self)
-        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
-
-    def __repr__(self):
-        return f"PolicySet {repr(self.allowed)}"
-
-    def to_json(self):
-        """Convert to JSON. Returns a sorted list so that the representation of the set
-        may be stable for testing and other purposes.
-        """
-        return sorted(list(self.allowed))
-
-    @classmethod
-    def from_json(cls, json_policy):
-        if isinstance(json_policy, str):
-            return PolicySet(json_policy)
-        return PolicySet(*json_policy)
-
-
-class PolicyDict(Policy):
-    def __init__(self, policy_dict):
-        self.policies = policy_dict
-
-    def should_allow(self, *args, **kwargs):
-        if len(args) == 0:
-            return False
-        key = args[0]
-        policy = self.policies.get(key, POLICY_FALSE)
-        if len(args) > 1:
-            return policy.should_allow(*args[1:], **kwargs)
-        else:
-            return policy.should_allow(**kwargs)
-
-    def sum_with(self, other_policy):
-        if (
-            isinstance(other_policy, PolicyBoolean)
-            or isinstance(other_policy, Expression)
-            or isinstance(other_policy, Operator)
-            or isinstance(other_policy, ExpressionList)
-        ):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, PolicySet):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, PolicyDict):
-            return self.recursive_sum_with(other_policy)
-        if isinstance(other_policy, CompoundPolicy):
-            return other_policy.add_policy_dict(self)
-        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
-
-    def add_all(self, key_policy_pairs):
-        policies = dict(self.policies)
-        for key, policy in key_policy_pairs:
-            current = policies.get(key, POLICY_FALSE)
-            policies[key] = policy.sum_with(current)
-        return PolicyDict(policies)
-
-    def recursive_sum_with(self, other_policy):
-        policies = dict(self.policies)
-        for k, v in other_policy.policies.items():
-            current_policy = policies.get(k, POLICY_FALSE)
-            policies[k] = current_policy.sum_with(v)
-        return PolicyDict(policies)
-
-    def __repr__(self):
-        return f"PolicyDict {repr(self.policies)}"
-
-    def to_json(self):
-        return {k: v.to_json() for k, v in self.policies.items()}
-
-    @classmethod
-    def from_json(cls, json_policy):
-        policies = {key: policy_from_json(value) for key, value in json_policy.items()}
-        return PolicyDict(policies)
-
-    def keys(self):
-        return self.policies.keys()
-
-
-class CompoundPolicy(Policy):
-    def __init__(self, policy_dict=None, policy_set=None, expressions=None):
-        self.policy_dict = PolicyDict({}) if policy_dict is None else policy_dict
-        if policy_set is not None:
-            self.policy_dict = self.policy_dict.sum_with(policy_set)
-        self.expressions = ExpressionList() if expressions is None else expressions
-
-    def should_allow(self, *args, **kwargs):
-        return self.policy_dict.should_allow(
-            *args, **kwargs
-        ) or self.expressions.should_allow(*args, **kwargs)
-
-    def sum_with(self, other_policy):
-        if isinstance(other_policy, PolicyBoolean):
-            return other_policy.sum_with(self)
-        if isinstance(other_policy, (Expression, Operator)):
-            return self.add_expression(other_policy)
-        if isinstance(other_policy, ExpressionList):
-            return self.add_expression_list(other_policy)
-        if isinstance(other_policy, PolicySet):
-            return self.add_policy_set(other_policy)
-        if isinstance(other_policy, PolicyDict):
-            return self.add_policy_dict(other_policy)
-        if isinstance(other_policy, CompoundPolicy):
-            return self.add_policy_dict(other_policy.policy_dict).add_expression_list(
-                other_policy.expressions
-            )
-        raise NotImplementedError(f"Unsupported type {type(other_policy)}")
-
-    def add_expression(self, expression):
-        return CompoundPolicy(
-            policy_dict=self.policy_dict,
-            expressions=self.expressions.sum_with(expression),
-        )
-
-    def add_expression_list(self, expression_list):
-        return CompoundPolicy(
-            policy_dict=self.policy_dict,
-            expressions=self.expressions.sum_with(expression_list),
-        )
-
-    def add_policy_set(self, policy_set):
-        return CompoundPolicy(
-            policy_dict=self.policy_dict,
-            policy_set=policy_set,
-            expressions=self.expressions,
-        )
-
-    def add_policy_dict(self, policy_dict):
-        return CompoundPolicy(
-            policy_dict=self.policy_dict.sum_with(policy_dict),
-            expressions=self.expressions,
-        )
-
-    def __repr__(self):
+    def __eq__(self, other):
+        if not isinstance(other, PolicyNode):
+            return NotImplemented
         return (
-            f"CompoundPolicy {{ expressions: {repr(self.expressions)}, "
-            f"policy_dict: {repr(self.policy_dict)} }}"
+            self.allow_all == other.allow_all
+            and dict(self.children) == dict(other.children)
+            and self.conditions == other.conditions
         )
 
+    def __hash__(self):
+        return hash((self.allow_all, frozenset(self.children.items()), self.conditions))
+
+    @property
+    def is_empty(self):
+        """True if this node has nothing: it allows nothing and evaluates
+        nothing."""
+        return not (self.allow_all or self.children or self.conditions)
+
+    def evaluate(self, *keys, resource=None):
+        return self._evaluate(keys, resource)
+
+    def _children_for(self, key):
+        child = self.children.get(key)
+        return () if child is None else (child,)
+
+    def _evaluate(self, keys, resource):
+        if self.allow_all:
+            return Decision.ALLOWED
+        undetermined = False
+        if keys:
+            for child in self._children_for(keys[0]):
+                decision = child._evaluate(keys[1:], resource)
+                if decision is Decision.ALLOWED:
+                    return decision
+                undetermined = undetermined or decision is Decision.UNDETERMINED
+        for condition in self.conditions:
+            decision = condition.evaluate_condition(resource)
+            if decision is Decision.ALLOWED:
+                return decision
+            undetermined = undetermined or decision is Decision.UNDETERMINED
+        return Decision.UNDETERMINED if undetermined else Decision.DENIED
+
+    def sum_with(self, other_policy):
+        other = as_node(other_policy)
+        if self.allow_all or other.is_empty:
+            return self
+        if other.allow_all or self.is_empty:
+            return other
+        children = dict(self.children)
+        for key, child in other.children.items():
+            children[key] = children[key].sum_with(child) if key in children else child
+        return PolicyNode(False, children, self.conditions + other.conditions)
+
+    def __repr__(self):
+        return f"PolicyNode {self.to_json()!r}"
+
     def to_json(self):
-        ret = dict()
-        if self.expressions is not None:
-            ret["expressions"] = self.expressions.to_json()
-        if self.policy_dict is not None and self.policy_dict.keys():
-            ret["policy_dict"] = self.policy_dict.to_json()
-        return ret
+        """The node as JSON: ``true`` if it allows all, ``false`` if it is empty,
+        otherwise an object with ``"children"`` (keys sorted) and ``"conditions"``,
+        each present only if non-empty."""
+        if self.allow_all:
+            return True
+        if self.is_empty:
+            return False
+        node_json = {}
+        if self.children:
+            node_json["children"] = {
+                key: self.children[key].to_json() for key in sorted(self.children)
+            }
+        if self.conditions:
+            node_json["conditions"] = [c.to_json() for c in self.conditions]
+        return node_json
 
     @classmethod
-    def from_json(cls, json_policy):
-        expressions = None
-        policy_dict = None
-        if "expressions" in json_policy:
-            expressions = ExpressionList.from_json(json_policy["expressions"])
-        if "policy_dict" in json:
-            policy_dict = PolicyDict.from_json(json_policy["policy_dict"])
-        return CompoundPolicy(policy_dict=policy_dict, expressions=expressions)
+    def from_json(cls, node_json):
+        """The node for :meth:`to_json`'s output."""
+        if node_json is True:
+            return POLICY_TRUE
+        if node_json is False:
+            return POLICY_FALSE
+        children = {
+            key: cls.from_json(child)
+            for key, child in node_json.get("children", {}).items()
+        }
+        conditions = [condition_from_json(c) for c in node_json.get("conditions", [])]
+        return cls(False, children, conditions)
+
+
+POLICY_TRUE = PolicyNode(allow_all=True)
+POLICY_FALSE = PolicyNode()
+
+
+def as_node(policy):
+    """`policy` as a :class:`PolicyNode`: a condition becomes a node with that one
+    condition. Raises ``NotImplementedError`` for anything else."""
+    if isinstance(policy, PolicyNode):
+        return policy
+    if isinstance(policy, Condition):
+        return PolicyNode(conditions=(policy,))
+    raise NotImplementedError(f"Unsupported type {type(policy)}")
+
+
+def condition_from_json(json_condition):
+    """The condition for a condition dict ``{"condition": <CEL string or operator
+    configuration>, "message": ...}`` (the message is optional)."""
+    value = json_condition["condition"]
+    message = json_condition.get("message")
+    if isinstance(value, dict) and "operator" in value:
+        return Operator(value, message)
+    return Expression(value, message)
+
+
+# Deprecated constructors of the node classes before 0.10. Each returns the
+# equivalent PolicyNode.
+
+
+def _warn_deprecated(name):
+    warnings.warn(
+        f"{name} is deprecated and returns a PolicyNode; build policies with "
+        "policy_from_json or PolicyNode.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def _merged(policies):
+    total = POLICY_FALSE
+    for p in policies:
+        total = total.sum_with(p)
+    return total
+
+
+def PolicyTrue():
+    """Deprecated: use :data:`POLICY_TRUE`."""
+    _warn_deprecated("PolicyTrue")
+    return POLICY_TRUE
+
+
+def PolicyFalse():
+    """Deprecated: use :data:`POLICY_FALSE`."""
+    _warn_deprecated("PolicyFalse")
+    return POLICY_FALSE
+
+
+def PolicySet(*args):
+    """Deprecated: a :class:`PolicyNode` allowing everything under each key."""
+    _warn_deprecated("PolicySet")
+    return _set(*args)
+
+
+def PolicyDict(policy_dict):
+    """Deprecated: a :class:`PolicyNode` with `policy_dict` as its children."""
+    _warn_deprecated("PolicyDict")
+    return PolicyNode(children=policy_dict)
+
+
+def ExpressionList(*args):
+    """Deprecated: a :class:`PolicyNode` merging the given policies (usually
+    conditions)."""
+    _warn_deprecated("ExpressionList")
+    return _merged(args)
+
+
+def CompoundPolicy(policy_dict=None, policy_set=None, expressions=None):
+    """Deprecated: a :class:`PolicyNode` merging the given policies."""
+    _warn_deprecated("CompoundPolicy")
+    return _merged(p for p in (policy_dict, policy_set, expressions) if p is not None)
+
+
+def _set(*keys):
+    return PolicyNode(children={key: POLICY_TRUE for key in keys})
+
+
+def _dict(policy_dict):
+    return PolicyNode(children=policy_dict)
 
 
 def policy_from_json(json_policy):
@@ -379,13 +421,13 @@ def policy_from_json(json_policy):
     if isinstance(json_policy, bool):
         return policy_from_bool(json_policy)
     elif isinstance(json_policy, str):
-        return PolicySet(json_policy)
+        return _set(json_policy)
     elif isinstance(json_policy, list):
         return policy_from_action_policy_list(json_policy)
     elif isinstance(json_policy, dict) and "condition" in json_policy:
-        return policy_from_condition(json_policy)
+        return as_node(policy_from_condition(json_policy))
     elif isinstance(json_policy, dict):
-        return PolicyDict(
+        return _dict(
             {key: action_policy_from_json(value) for key, value in json_policy.items()}
         )
     else:
@@ -409,7 +451,7 @@ def action_policy_from_json(json_policy):
     if isinstance(json_policy, bool):
         return policy_from_bool(json_policy)
     elif isinstance(json_policy, str):
-        return PolicySet(json_policy)
+        return _set(json_policy)
     elif isinstance(json_policy, list):
         return policy_from_action_policy_list(json_policy)
     elif isinstance(json_policy, dict):
@@ -427,11 +469,11 @@ def policy_from_action_policy_list(policy_list):
 
     def as_policy(x):
         if isinstance(x, str):
-            return PolicySet(x)
+            return _set(x)
         else:
             return policy_from_action_condition(x)
 
-    total = PolicySet()
+    total = POLICY_FALSE
     for p in policy_list:
         total = total.sum_with(as_policy(p))
     return total
@@ -448,7 +490,7 @@ def policy_from_action_policy_dict(policy_dict):
         if isinstance(x, bool):
             return policy_from_bool(x)
         elif isinstance(x, str):
-            return PolicySet(x)
+            return _set(x)
         elif isinstance(x, dict) and "condition" in x:
             return policy_from_condition(x)
         elif isinstance(x, list):
@@ -458,7 +500,7 @@ def policy_from_action_policy_dict(policy_dict):
         else:
             raise Exception(f"Invalid action policy dictionary value {x}")
 
-    return PolicyDict({key: as_policy(value) for key, value in policy_dict.items()})
+    return _dict({key: as_policy(value) for key, value in policy_dict.items()})
 
 
 def policy_from_action_condition(action_condition):
@@ -467,9 +509,7 @@ def policy_from_action_condition(action_condition):
     ActionCondition: { String::ActionName: String::Expr }
     ```
     """
-    return PolicyDict(
-        {key: Expression(value) for key, value in action_condition.items()}
-    )
+    return _dict({key: Expression(value) for key, value in action_condition.items()})
 
 
 def policy_from_resource_policy_list(policy_list):
@@ -481,11 +521,11 @@ def policy_from_resource_policy_list(policy_list):
 
     def as_policy(x):
         if isinstance(x, str):
-            return PolicySet(x)
+            return _set(x)
         else:
             return policy_from_resource_condition(x)
 
-    total = PolicySet()
+    total = POLICY_FALSE
     for p in policy_list:
         total = total.sum_with(as_policy(p))
     return total
@@ -504,7 +544,7 @@ def policy_from_resource_policy_dict(policy_dict):
         else:
             return Expression(x)
 
-    return PolicyDict({key: as_policy(value) for key, value in policy_dict.items()})
+    return _dict({key: as_policy(value) for key, value in policy_dict.items()})
 
 
 def policy_from_resource_condition(resource_condition):
@@ -514,7 +554,7 @@ def policy_from_resource_condition(resource_condition):
     ```
     """
     if isinstance(resource_condition, str):
-        return PolicyDict(
+        return _dict(
             {key: Expression(value) for key, value in resource_condition.items()}
         )
     elif isinstance(resource_condition, dict) and "operator" in resource_condition:
@@ -524,14 +564,15 @@ def policy_from_resource_condition(resource_condition):
 def policy_from_condition(condition):
     """
     ```
-    Condition: { 'condition': String::Expr |  }
+    Condition: { 'condition': String::Expr | OperatorConfig }
     ```
+    A value that is neither (which the grammar does not allow, issue #17) is kept
+    as an Expression, which fails when it is evaluated.
     """
     condition_value = condition.get("condition")
-    if isinstance(condition_value, str):
-        return Expression(condition_value)
-    elif isinstance(condition_value, dict) and "operator" in condition_value:
+    if isinstance(condition_value, dict) and "operator" in condition_value:
         return Operator(condition_value)
+    return Expression(condition_value)
 
 
 def policy_from_bool(b):
@@ -542,19 +583,25 @@ def policy_from_bool(b):
 
 
 class RootPolicy:
+    """A user's effective policy: :attr:`policy` is a node whose keys are contexts,
+    then action IRIs, then resource type IRIs."""
+
     def __init__(self):
         self.policy = POLICY_FALSE
 
+    def evaluate(self, permission, context_id, resource=None):
+        """The :class:`Decision` for `permission` in `context_id` on `resource`."""
+        return self.policy.evaluate(context_id, *permission, resource=resource)
+
     def should_allow(self, permission, context_id, resource=None):
-        return self.policy.should_allow(context_id, *permission, resource=resource)
+        """``True`` if, and only if, :meth:`evaluate` is ``ALLOWED``."""
+        return self.evaluate(permission, context_id, resource) is Decision.ALLOWED
 
     def add_json_policy_for_context(self, json_policy, context):
-        policy = policy_from_json(json_policy)
-        self.add_policy(PolicyDict({context: policy}))
-        return self
+        return self.add_policy_for_context(policy_from_json(json_policy), context)
 
     def add_policy_for_context(self, policy, context):
-        self.add_policy(PolicyDict({context: policy}))
+        self.add_policy(PolicyNode(children={context: policy}))
         return self
 
     def add_policy(self, policy):
@@ -568,10 +615,10 @@ class RootPolicy:
         return self.policy.to_json()
 
     def get_contexts_for(self, permission):
-        # FIXME This isn't done, yet
-        if isinstance(self.policy, PolicyDict):
-            return self.policy.keys()
-        if isinstance(self.policy, CompoundPolicy):
-            # Context-level conditions are ignored here, so filtering fails closed.
-            return self.policy.policy_dict.keys()
-        return None
+        """The contexts a GET list is restricted to, or ``None`` for no
+        restriction. Top-level conditions are ignored, so filtering fails closed
+        when there are also context grants (issue #5)."""
+        # FIXME This ignores `permission` (issue #5).
+        if self.policy.allow_all or not self.policy.children:
+            return None
+        return list(self.policy.children)

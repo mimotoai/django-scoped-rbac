@@ -159,6 +159,16 @@ def test_list_filtering(superuser, editor_user):
     And.role_list_does_not_contain(role_in_context2_url)
 
 
+def node_json_of_grants(definition):
+    """The node JSON of a role `definition` of the form {action: [resource type]}."""
+    return {
+        "children": {
+            action: {"children": {resource_type: True for resource_type in grants}}
+            for action, grants in sorted(definition.items())
+        }
+    }
+
+
 @pytest.mark.django_db
 @scripted_test
 def test_get_user_rbac_policy(superuser, editor_user):
@@ -188,9 +198,10 @@ def test_get_user_rbac_policy(superuser, editor_user):
     And.get_user_rbac_policy()
     Then.http.response_json_is(
         {
-            context1_name: role_in_context1_json["definition"],
-            context2_name: role_in_context2_json["definition"],
-            SOME_CONTEXT: role_in_context1_json["definition"],
+            "children": {
+                context: node_json_of_grants(role_in_context1_json["definition"])
+                for context in sorted([context1_name, context2_name, SOME_CONTEXT])
+            }
         }
     )
 

@@ -129,7 +129,9 @@ def context_condition_for_authenticated(monkeypatch):
         monkeypatch, POLICY_FOR_AUTHENTICATED={"condition": "false"}
     )
     for _ in defaults:
-        assert policy_for_authenticated().to_json() == "false"
+        assert policy_for_authenticated().to_json() == {
+            "conditions": [{"condition": "false"}]
+        }
         yield
     assert policy_for_authenticated().to_json() is False
 

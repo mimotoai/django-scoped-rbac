@@ -14,13 +14,9 @@ def sum_policies(total_policy, additional_policy):
     granted by `additional_policy` as also granted in `SOME_CONTEXT`.
     """
     total_policy.add_policy(additional_policy)
-    if isinstance(additional_policy, policy.PolicyDict):
-        policy_dict = additional_policy
-    elif isinstance(additional_policy, policy.CompoundPolicy):
-        policy_dict = additional_policy.policy_dict
-    else:
-        policy_dict = policy.PolicyDict({})
-    for context, p in policy_dict.policies.items():
+    # Only the grants under each context are copied: a top-level condition or
+    # allow-all already applies in every context, SOME_CONTEXT included.
+    for context, p in policy.as_node(additional_policy).children.items():
         total_policy.add_policy_for_context(p, SOME_CONTEXT)
 
 
