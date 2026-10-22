@@ -179,3 +179,28 @@ def test_post_checked_with_queryset_annotation_is_allowed(user):
 
     assert response.status_code == 201, response.content
     assert ExampleAccessControlledModel.objects.filter(name="child").exists()
+
+
+# An update can take the object out of the view's queryset
+
+
+class UnarchivedViewSet(NamedModelViewSet):
+    def get_queryset(self):
+        return ExampleAccessControlledModel.objects.exclude(name="archived")
+
+
+@pytest.mark.parametrize("granted, status", [(("A",), 200), ((), 403)])
+@pytest.mark.django_db
+def test_update_moving_object_out_of_the_queryset_is_still_checked(
+    user, granted, status
+):
+    grant(user, {"http.PATCH": [EXAMPLE]}, *granted)
+    target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
+
+    response = call_view(
+        UnarchivedViewSet, user, "patch", {"name": "archived"}, pk=target.pk
+    )
+
+    assert response.status_code == status, response.content
+    target.refresh_from_db()
+    assert target.name == ("archived" if status == 200 else "x")
