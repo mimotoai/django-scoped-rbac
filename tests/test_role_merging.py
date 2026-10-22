@@ -1,15 +1,18 @@
 """A user's roles are merged into one policy by `policy_for` (GitLab issues #2, #3)."""
 
 import pytest
+from django.conf import settings
+from django.test import override_settings
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
-from scoped_rbac.conf import policy_for_staff
+from scoped_rbac import conf
+from scoped_rbac.conf import policy_for_authenticated, policy_for_staff
 from scoped_rbac.permissions import policy_for
 from scoped_rbac.policy import Permission
 from scoped_rbac.rbac_contexts import DEFAULT_CONTEXT, SOME_CONTEXT
 
-from .helpers import EXAMPLE, EXAMPLE_URL, assign, client_for, make_role
+from .helpers import EXAMPLE, EXAMPLE_URL, assign, client_for, grant, make_role
 from .models import ExampleAccessControlledModel
 
 OK = {"status": "ok"}
@@ -104,3 +107,35 @@ def test_merging_roles_does_not_change_the_settings_default_policy(django_user_m
     assert other_policy.should_allow(
         get("rbac.ExampleAccessControlledModel"), DEFAULT_CONTEXT, NOT_OK
     )
+
+
+@pytest.fixture
+def context_condition_for_authenticated(monkeypatch):
+    """Make the settings default policy for authenticated users a context-level
+    condition. Resolved settings are cached in `conf.RESOLVED_SETTINGS`, so the cache
+    is cleared for the test and the original restored afterwards."""
+    scoped_rbac = {
+        **settings.SCOPED_RBAC,
+        "POLICY_FOR_AUTHENTICATED": {"condition": "false"},
+    }
+    with override_settings(SCOPED_RBAC=scoped_rbac):
+        monkeypatch.setattr(conf, "RESOLVED_SETTINGS", None)
+        assert policy_for_authenticated().to_json() == "false"
+        yield
+    monkeypatch.undo()
+    assert policy_for_authenticated().to_json() is False
+
+
+@pytest.mark.django_db
+def test_list_is_filtered_when_a_default_policy_has_a_context_condition(
+    user, context_condition_for_authenticated
+):
+    grant(user, {"http.GET": [EXAMPLE, f"{EXAMPLE}/list"]}, "ctx2")
+    ExampleAccessControlledModel.objects.create(name="a", rbac_context="ctx2")
+    ExampleAccessControlledModel.objects.create(name="b", rbac_context="ctx3")
+
+    response = client_for(user).get("/api/example-access-controlled-models/")
+
+    assert response.status_code == 200, response.content
+    # Only the ctx2 object; the ctx3 one is filtered out.
+    assert response.data["count"] == 1

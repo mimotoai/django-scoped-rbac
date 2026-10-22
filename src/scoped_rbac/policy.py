@@ -573,6 +573,7 @@ class RootPolicy:
         # FIXME This isn't done, yet
         if isinstance(self.policy, PolicyDict):
             return self.policy.keys()
-        if isinstance(self.policy, CompoundPolicy) and self.policy.expressions is None:
+        if isinstance(self.policy, CompoundPolicy):
+            # Context-level conditions are ignored here, so filtering fails closed.
             return self.policy.policy_dict.keys()
         return None
