@@ -9,6 +9,7 @@ from scoped_rbac.cel import (
     is_true,
     new_environment,
 )
+from scoped_rbac.cel import evaluate as evaluate_compiled
 from scoped_rbac.policy import Permission, policy_from_json
 
 
@@ -104,3 +105,32 @@ def test_policy_condition_evaluates_against_resource():
     assert not policy.should_allow(
         *Permission("GET", "Thing"), resource={"content": {}}
     )
+
+
+@pytest.mark.parametrize(
+    "expression, data, expected",
+    [
+        ("a == 1", {"a": 1}, True),
+        ("a == 1", {"a": 2}, False),
+        ("true", None, True),
+        ("false", None, False),
+        # A missing variable (including no data at all), an exception in a
+        # registered function and a non-boolean result cannot be decided.
+        ("a == 1", {}, None),
+        ("a == 1", None, None),
+        ("explodes(status)", {"status": "x"}, None),
+        ("1 + 1", {}, None),
+    ],
+)
+def test_evaluate_is_three_valued(expression, data, expected):
+    compiled = compile_expression(expression, new_environment({"explodes": explodes}))
+
+    assert evaluate_compiled(compiled, data) is expected
+    assert is_true(compiled, data) is (expected is True)
+
+
+def test_evaluate_rejects_non_mapping_data():
+    compiled = compile_expression("true", new_environment({}))
+
+    with pytest.raises(TypeError, match="must be a mapping"):
+        evaluate_compiled(compiled, ["not", "a", "mapping"])

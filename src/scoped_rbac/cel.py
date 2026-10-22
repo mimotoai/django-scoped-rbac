@@ -106,14 +106,27 @@ def compile_expression(expression, environment=None):
         raise InvalidExpression(f"Invalid CEL expression {expression!r}: {e}") from e
 
 
+def evaluate(compiled_expression, data):
+    """Evaluate `compiled_expression` against the `data` mapping (or ``None`` for no
+    data): ``True`` or ``False`` for a boolean result, and ``None`` when the result
+    cannot be decided, such as an evaluation error (a missing field, including any
+    field when there is no data, or an exception in a registered function) or a
+    non-boolean result. Raises ``TypeError`` if `data` is neither a mapping nor
+    ``None``.
+    """
+    if data is not None and not isinstance(data, Mapping):
+        raise TypeError(f"CEL data must be a mapping, not {type(data).__name__}")
+    result = compiled_expression.eval(data=data)
+    if result.type() == cel.Type.BOOL:
+        return result.value() is True
+    if result.type() == cel.Type.ERROR:
+        logger.debug("CEL evaluation error: %s", result.value())
+    return None
+
+
 def is_true(compiled_expression, data):
     """Evaluate `compiled_expression` against the `data` mapping. Only a boolean
     ``true`` result counts as true, so evaluation errors such as a missing field or
     an exception in a registered function fail closed.
     """
-    if data is not None and not isinstance(data, Mapping):
-        raise TypeError(f"CEL data must be a mapping, not {type(data).__name__}")
-    result = compiled_expression.eval(data=data)
-    if result.type() == cel.Type.ERROR:
-        logger.debug("CEL evaluation error: %s", result.value())
-    return result.type() == cel.Type.BOOL and result.value() is True
+    return evaluate(compiled_expression, data) is True
