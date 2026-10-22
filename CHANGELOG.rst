@@ -4,8 +4,12 @@ scoped_rbac Change Log
 
 .. current developments
 
-Unreleased
+v0.9.1
 ====================
+
+Security and authorization-behaviour release. The branch carries version 0.9.0; CI's
+publish job bumps the patch version, so 0.9.1 is the first release published with
+these changes.
 
 **Fixed:**
 
