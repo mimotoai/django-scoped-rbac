@@ -107,3 +107,11 @@ class TestJsonPolicy:
 
         thingone = Res(1, {"status": "ok"})
         assert policy.should_allow(Permission("GET", "ThingOne"), "a", thingone) is True
+
+
+def test_get_contexts_for_ignores_context_conditions():
+    """Context-level conditions are ignored for list filtering (fail closed)."""
+    policy = RootPolicy().add_policy(policy_from_json({"condition": "true"}))
+    policy.add_json_policy_for_context({"GET": ["One"]}, "a")
+
+    assert set(policy.get_contexts_for(permission_one)) == {"a"}

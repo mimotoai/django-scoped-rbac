@@ -1,10 +1,17 @@
+import pytest
+
 from scoped_rbac.policy import (
     POLICY_FALSE,
     POLICY_TRUE,
+    CompoundPolicy,
+    Expression,
+    ExpressionList,
     Operator,
     Permission,
     PolicyDict,
     PolicySet,
+    RootPolicy,
+    policy_from_json,
 )
 
 permission_one = Permission(action="GET", resource_type="One")
@@ -166,3 +173,287 @@ def test_operator():
     assert operator.should_allow(resource=False) is False
     assert operator.should_allow(resource=42) is False
     assert operator.should_allow(resource=True) is True
+
+
+class TestMerging:
+    """Regression tests for `sum_with` (GitLab issues #2 and #3).
+
+    The merge contract is tests/test_policy_merge_properties.py. Tests here marked
+    "Characterisation" construct the current node classes directly or pin their
+    `to_json` shapes; the planned PolicyNode rewrite may replace them.
+    """
+
+    @pytest.mark.parametrize(
+        "first, second",
+        [
+            ([{"http.GET": "status == 'ok'"}], {"http.GET": ["Other"]}),
+            ({"condition": "status == 'ok'"}, {"http.GET": ["Thing"]}),
+        ],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_conditional_and_plain_grants_merge(self, first, second, reverse):
+        a, b = policy_from_json(first), policy_from_json(second)
+        if reverse:
+            a, b = b, a
+
+        policy = a.sum_with(b)
+
+        ok, not_ok = {"status": "ok"}, {"status": "no"}
+        assert policy.should_allow("http.GET", "Anything", resource=ok) is True
+        assert policy.should_allow("http.GET", "Anything", resource=not_ok) is False
+        plain_type = "Other" if "Other" in str(second) else "Thing"
+        assert policy.should_allow("http.GET", plain_type, resource=not_ok) is True
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_issue_3_resource_condition_merged_with_condition_list(self, reverse):
+        resource_condition = policy_from_json(
+            {"GET": {"Thing": {"condition": "c == 1"}}}
+        )
+        condition_list = policy_from_json(
+            {"GET": [{"Thing": "a == 1"}, {"Thing": "b == 1"}]}
+        )
+        a, b = resource_condition, condition_list
+        if reverse:
+            a, b = b, a
+
+        policy = a.sum_with(b)
+
+        for allowed in ({"a": 1}, {"b": 1}, {"c": 1}):
+            assert policy.should_allow("GET", "Thing", resource=allowed) is True
+        assert policy.should_allow("GET", "Thing", resource={"a": 2}) is False
+        assert policy.should_allow("GET", "Other", resource={"a": 1}) is False
+
+    def test_compound_policies_merge(self):
+        # Characterisation of the current node classes (see the class docstring).
+        a = CompoundPolicy(
+            policy_dict=PolicyDict({"x": POLICY_TRUE}),
+            expressions=ExpressionList(Expression("a == 1")),
+        )
+        b = CompoundPolicy(
+            policy_set=PolicySet("y"), expressions=ExpressionList(Expression("a == 2"))
+        )
+
+        policy = a.sum_with(b)
+
+        assert policy.should_allow("x", resource={}) is True
+        assert policy.should_allow("y", resource={}) is True
+        assert policy.should_allow("z", resource={"a": 1}) is True
+        assert policy.should_allow("z", resource={"a": 2}) is True
+        assert policy.should_allow("z", resource={"a": 3}) is False
+
+    def test_operator_merged_into_empty_compound_policy_is_kept(self):
+        # Characterisation of the current node classes (see the class docstring).
+        operator = Operator({"operator": "istrue"})
+
+        assert CompoundPolicy().sum_with(operator).should_allow(resource=True) is True
+        assert CompoundPolicy().add_expression(operator).should_allow(resource=True)
+
+    def test_merging_conditions_with_a_plain_grant_to_json(self):
+        # Characterisation of the current node classes (see the class docstring).
+        policy = Expression("a == 1").sum_with(PolicySet("x"))
+
+        assert policy.to_json() == {
+            "expressions": ["a == 1"],
+            "policy_dict": {"x": True},
+        }
+
+    def test_to_json_of_merges_that_already_worked_is_unchanged(self):
+        # Characterisation of the current node classes (see the class docstring).
+        e1, e2, e3 = Expression("a == 1"), Expression("a == 2"), Expression("a == 3")
+        assert e1.sum_with(e2).to_json() == ["a == 1", "a == 2"]
+        assert e1.sum_with(e2).sum_with(e3).to_json() == ["a == 3", "a == 1", "a == 2"]
+        assert PolicySet("y").sum_with(PolicySet("x")).to_json() == ["x", "y"]
+        assert PolicySet("y").sum_with(PolicyDict({"x": e1})).to_json() == {
+            "x": "a == 1",
+            "y": True,
+        }
+        assert PolicyDict({"x": e1}).sum_with(PolicyDict({"x": e2})).to_json() == {
+            "x": ["a == 1", "a == 2"]
+        }
+
+    @pytest.mark.parametrize(
+        "other, other_contexts, master_json",
+        [
+            (
+                Expression("a == 2"),
+                set(),
+                {"expressions": ["a == 1", "a == 2"], "policy_dict": {"w": True}},
+            ),
+            (
+                ExpressionList(Expression("a == 2"), Operator({"operator": "istrue"})),
+                set(),
+                None,  # Operator.to_json is broken (#28).
+            ),
+            (
+                PolicySet("x"),
+                {"x"},
+                {"expressions": "a == 1", "policy_dict": {"w": True, "x": True}},
+            ),
+            (
+                PolicyDict({"y": Expression("a == 2")}),
+                {"y"},
+                {"expressions": "a == 1", "policy_dict": {"w": True, "y": "a == 2"}},
+            ),
+            (
+                CompoundPolicy(
+                    policy_dict=PolicyDict({"z": POLICY_TRUE}),
+                    expressions=ExpressionList(Expression("a == 2")),
+                ),
+                {"z"},
+                None,  # RecursionError in 0.9.1.
+            ),
+            (
+                CompoundPolicy(expressions=Expression("a == 2")),
+                set(),
+                None,  # RecursionError in 0.9.1.
+            ),
+        ],
+        ids=["expression", "list", "set", "dict", "compound", "lone_compound"],
+    )
+    @pytest.mark.parametrize(
+        "lone",
+        [Expression("a == 1"), Operator({"operator": "istrue"})],
+        ids=["expression", "operator"],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_a_lone_condition_merges(
+        self, lone, other, other_contexts, master_json, reverse
+    ):
+        # Characterisation of the current node classes (see the class docstring).
+        # Settings may supply hand-built policies, whose `expressions` may be a lone
+        # condition rather than an `ExpressionList`.
+        compound = CompoundPolicy(
+            policy_dict=PolicyDict({"w": POLICY_TRUE}), expressions=lone
+        )
+        a, b = (other, compound) if reverse else (compound, other)
+
+        policy = a.sum_with(b)
+
+        for keys in [(), ("w",), ("x",), ("y",), ("z",), ("v",)]:
+            for resource in [{"a": 1}, {"a": 2}, {"a": 3}, {}]:
+                expected = a.should_allow(*keys, resource=resource) or b.should_allow(
+                    *keys, resource=resource
+                )
+                actual = policy.should_allow(*keys, resource=resource)
+                assert actual is expected, (keys, resource)
+        contexts = RootPolicy().add_policy(policy).get_contexts_for(permission_one)
+        assert set(contexts) == {"w"} | other_contexts
+        if isinstance(lone, Expression):
+            # `to_json` as in 0.9.1 (`master_json`, computed with 0.9.1's policy.py)
+            # in either order; `expressions` serialises as given until merged with
+            # another condition.
+            assert compound.to_json() == {
+                "expressions": "a == 1",
+                "policy_dict": {"w": True},
+            }
+            if master_json is not None:
+                assert policy.to_json() == master_json
+            elif not isinstance(other, ExpressionList):
+                policy.to_json()
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_a_lone_condition_keeps_condition_order(self, reverse):
+        # Characterisation of the current node classes (see the class docstring).
+        # Expected `to_json` values were computed with 0.9.1's policy.py.
+        def hand():
+            return CompoundPolicy(
+                policy_dict=PolicyDict({"w": POLICY_TRUE}),
+                expressions=Expression("a == 1"),
+            )
+
+        def ordered(a, b):
+            return b.sum_with(a) if reverse else a.sum_with(b)
+
+        merged = ordered(hand(), policy_from_json({"condition": "a == 2"}))
+        nested = ordered(PolicyDict({"x": hand()}), policy_from_json([{"x": "a == 2"}]))
+
+        merged_json = {"expressions": ["a == 1", "a == 2"], "policy_dict": {"w": True}}
+        assert merged.to_json() == merged_json
+        assert nested.to_json() == {"x": merged_json}
+
+    @pytest.mark.parametrize(
+        "expressions, other, master_json",
+        [
+            (
+                POLICY_FALSE,
+                Expression("a == 2"),
+                {"expressions": "a == 2", "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_FALSE,
+                ExpressionList(Expression("a == 2"), Expression("a == 3")),
+                {"expressions": ["a == 2", "a == 3"], "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_TRUE,
+                Expression("a == 2"),
+                {"expressions": True, "policy_dict": {"w": True}},
+            ),
+            (
+                POLICY_TRUE,
+                ExpressionList(Expression("a == 2"), Expression("a == 3")),
+                {"expressions": True, "policy_dict": {"w": True}},
+            ),
+            *[
+                (
+                    boolean,
+                    CompoundPolicy(
+                        policy_dict=PolicyDict({"z": POLICY_TRUE}),
+                        expressions=ExpressionList(Expression("a == 2")),
+                    ),
+                    None,  # RecursionError in 0.9.1.
+                )
+                for boolean in (POLICY_FALSE, POLICY_TRUE)
+            ],
+        ],
+        ids=[
+            "false-condition",
+            "false-list",
+            "true-condition",
+            "true-list",
+            "false-compound",
+            "true-compound",
+        ],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_compound_policy_with_boolean_expressions_merges(
+        self, expressions, other, master_json, reverse
+    ):
+        # Characterisation of the current node classes (see the class docstring).
+        # Expected `to_json` values were computed with 0.9.1's policy.py.
+        compound = CompoundPolicy(
+            policy_dict=PolicyDict({"w": POLICY_TRUE}), expressions=expressions
+        )
+        a, b = (other, compound) if reverse else (compound, other)
+
+        policy = a.sum_with(b)
+
+        for keys in [(), ("w",), ("z",), ("v",)]:
+            for resource in [{"a": 1}, {"a": 2}, {"a": 3}, {}]:
+                expected = a.should_allow(*keys, resource=resource) or b.should_allow(
+                    *keys, resource=resource
+                )
+                actual = policy.should_allow(*keys, resource=resource)
+                assert actual is expected, (keys, resource)
+        if master_json is not None:
+            assert policy.to_json() == master_json
+        else:
+            policy.to_json()
+
+    @pytest.mark.parametrize(
+        "policy",
+        [
+            Expression("a == 1"),
+            Operator({"operator": "istrue"}),
+            ExpressionList(Expression("a == 1")),
+            PolicySet("x"),
+            PolicyDict({"x": POLICY_TRUE}),
+            CompoundPolicy(expressions=ExpressionList(Expression("a == 1"))),
+        ],
+        ids=repr,
+    )
+    @pytest.mark.parametrize("other", [None, object(), {"x": True}], ids=repr)
+    def test_merging_an_unsupported_type_raises(self, policy, other):
+        # Characterisation of the current node classes (see the class docstring).
+        with pytest.raises(NotImplementedError, match="Unsupported type"):
+            policy.sum_with(other)

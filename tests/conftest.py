@@ -1,5 +1,6 @@
 import os
 import sys
+from collections.abc import Mapping
 
 import pytest
 
@@ -100,7 +101,12 @@ def pytest_configure(config):
             "POLICY_FOR_UNAUTHENTICATED": "tests.policy.policy_for_unauthenticated",
             "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
             "OPERATORS": {
-                "istrue": lambda resource, configuration: resource == True,
+                # True for the resource `True`, and for a mapping whose "a" is 3 (so
+                # that the merge property tests can see operators next to CEL).
+                "istrue": lambda resource, configuration: (
+                    resource == True
+                    or (isinstance(resource, Mapping) and resource.get("a") == 3)
+                ),
             },
         },
     )
