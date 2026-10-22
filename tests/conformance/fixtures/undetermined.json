@@ -1,0 +1,308 @@
+{
+  "description": "Conditions that cannot be decided.",
+  "cases": [
+    {
+      "name": "missing_variable_or_resource",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "a == 1"
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": "a == 1", "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"b": 1}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]}
+      ]
+    },
+    {
+      "name": "missing_field",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "b.c == 'x'"
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "b.c == 'x'"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "b.c == 'x'"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"b": {"c": "x"}}, "expected": "allowed", "conditions": [{"condition": "b.c == 'x'", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"b": {"c": "y"}}, "expected": "denied", "conditions": [{"condition": "b.c == 'x'", "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"b": {}}, "expected": "undetermined", "conditions": [{"condition": "b.c == 'x'", "decision": "undetermined"}]}
+      ]
+    },
+    {
+      "name": "constant_conditions_need_no_resource",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "true"
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "false"
+              }
+            }
+          },
+          "context": "c2"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "true"
+                },
+                {
+                  "condition": "false"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "true"
+                }
+              ]
+            }
+          }
+        },
+        "c2": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "false"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": [{"condition": "true", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": [{"condition": "true", "decision": "allowed"}]},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "denied", "conditions": [{"condition": "false", "decision": "denied"}]},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": [{"condition": "false", "decision": "denied"}]}
+      ]
+    },
+    {
+      "name": "non_boolean_result",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "1 + 1"
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "1 + 1"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "1 + 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": "1 + 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "1 + 1", "decision": "undetermined"}]}
+      ]
+    },
+    {
+      "name": "kleene_or",
+      "description": "Undetermined or denied is undetermined; anything or allowed is allowed.",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "a == 1"
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "b == 1"
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.GET": {
+              "*": {
+                "condition": {
+                  "operator": "a_at_least",
+                  "min": 5
+                }
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 5
+                  }
+                }
+              ]
+            },
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                },
+                {
+                  "condition": "b == 1"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 5
+                  }
+                }
+              ]
+            },
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                },
+                {
+                  "condition": "b == 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "denied"}, {"condition": "b == 1", "decision": "undetermined"}, {"condition": {"operator": "a_at_least", "min": 5}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"b": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "undetermined"}, {"condition": "b == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 6}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "denied"}, {"condition": "b == 1", "decision": "undetermined"}, {"condition": {"operator": "a_at_least", "min": 5}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}, {"condition": "b == 1", "decision": "undetermined"}, {"condition": {"operator": "a_at_least", "min": 5}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 5}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 5}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"b": 1}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 5}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 6}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 5}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 5}, "decision": "undetermined"}]}
+      ]
+    }
+  ]
+}

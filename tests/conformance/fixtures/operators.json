@@ -1,0 +1,227 @@
+{
+  "description": "The fixture operators istrue and a_at_least.",
+  "cases": [
+    {
+      "name": "istrue",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": {
+                  "operator": "istrue"
+                }
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "istrue"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "istrue"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": {"operator": "istrue"}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": {"operator": "istrue"}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": [{"condition": {"operator": "istrue"}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "denied", "conditions": [{"condition": {"operator": "istrue"}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": true, "expected": "allowed", "conditions": [{"condition": {"operator": "istrue"}, "decision": "allowed"}]}
+      ]
+    },
+    {
+      "name": "a_at_least",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": {
+                  "operator": "a_at_least",
+                  "min": 2
+                }
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.PUT": {
+              "app.Thing": [
+                {
+                  "operator": "a_at_least",
+                  "min": 3
+                }
+              ]
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 2
+                  }
+                }
+              ]
+            }
+          },
+          "http.PUT": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 3
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 2
+                  }
+                }
+              ]
+            }
+          },
+          "http.PUT": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 3
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": "x"}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 2}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "denied"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": {"a": "x"}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.PUT", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "undetermined"}]}
+      ]
+    },
+    {
+      "name": "operator_and_cel",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": {
+                  "operator": "a_at_least",
+                  "min": 3
+                }
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "a == 1"
+              }
+            }
+          },
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 3
+                  }
+                },
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": {
+                    "operator": "a_at_least",
+                    "min": 3
+                  }
+                },
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "denied"}, {"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "denied"}, {"condition": "a == 1", "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "undetermined"}, {"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": {"operator": "a_at_least", "min": 3}, "decision": "undetermined"}, {"condition": "a == 1", "decision": "undetermined"}]}
+      ]
+    }
+  ]
+}

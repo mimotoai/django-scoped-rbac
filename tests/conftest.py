@@ -1,6 +1,5 @@
 import os
 import sys
-from collections.abc import Mapping
 
 import pytest
 
@@ -55,6 +54,8 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     from django.conf import settings
 
+    from .conformance.operators import OPERATORS as CONFORMANCE_OPERATORS
+
     settings.configure(
         DEBUG_PROPAGATE_EXCEPTIONS=True,
         # "other" and "replica" are separate in-memory databases for multi-database
@@ -100,14 +101,10 @@ def pytest_configure(config):
         SCOPED_RBAC={
             "POLICY_FOR_UNAUTHENTICATED": "tests.policy.policy_for_unauthenticated",
             "POLICY_FOR_STAFF": "tests.policy.policy_for_staff",
-            "OPERATORS": {
-                # True for the resource `True`, and for a mapping whose "a" is 3 (so
-                # that the merge property tests can see operators next to CEL).
-                "istrue": lambda resource, configuration: (
-                    resource == True
-                    or (isinstance(resource, Mapping) and resource.get("a") == 3)
-                ),
-            },
+            # `istrue` is true for the resource `True`, and for a mapping whose "a"
+            # is 3 (so that the merge property tests can see operators next to
+            # CEL). These operators are also those of the conformance fixtures.
+            "OPERATORS": CONFORMANCE_OPERATORS,
         },
     )
 

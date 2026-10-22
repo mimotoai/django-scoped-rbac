@@ -1,0 +1,468 @@
+{
+  "description": "The \"*\" key.",
+  "cases": [
+    {
+      "name": "any_action",
+      "assignments": [
+        {
+          "definition": [
+            "*"
+          ],
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "*": [
+              "app.Thing"
+            ]
+          },
+          "context": "c2"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "*": {
+            "*": true
+          }
+        },
+        "c1": {
+          "*": {
+            "*": true
+          }
+        },
+        "c2": {
+          "*": {
+            "app.Thing": true
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []}
+      ]
+    },
+    {
+      "name": "any_resource_type",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "*": true
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": {
+            "http.DELETE": [
+              "*"
+            ]
+          },
+          "context": "c2"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "http.DELETE": {
+            "*": true
+          },
+          "http.GET": {
+            "*": true
+          }
+        },
+        "c1": {
+          "http.GET": {
+            "*": true
+          }
+        },
+        "c2": {
+          "http.DELETE": {
+            "*": true
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "allowed", "conditions": []}
+      ]
+    },
+    {
+      "name": "any_context_default",
+      "description": "A \"*\" context is not copied to __SOME_CONTEXT__, which it already matches.",
+      "defaults": [
+        {
+          "*": {
+            "http.GET": [
+              "app.Thing"
+            ]
+          },
+          "c1": {
+            "http.DELETE": [
+              "app.Thing"
+            ]
+          }
+        }
+      ],
+      "wire": {
+        "*": {
+          "http.GET": {
+            "app.Thing": true
+          }
+        },
+        "__SOME_CONTEXT__": {
+          "http.DELETE": {
+            "app.Thing": true
+          }
+        },
+        "c1": {
+          "http.DELETE": {
+            "app.Thing": true
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "c2", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "allowed", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "denied", "conditions": []},
+        {"context": "__SOME_CONTEXT__", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "denied", "conditions": []},
+        {"context": "*", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "allowed", "conditions": []},
+        {"context": "*", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "denied", "conditions": []}
+      ]
+    },
+    {
+      "name": "specific_key_then_any",
+      "description": "The specific key is evaluated before \"*\", at each level.",
+      "assignments": [
+        {
+          "definition": {
+            "http.GET": {
+              "app.Thing": {
+                "condition": "a == 1"
+              },
+              "*": {
+                "condition": "a == 2"
+              }
+            }
+          },
+          "context": "c1"
+        },
+        {
+          "definition": [
+            {
+              "*": "a == 3"
+            }
+          ],
+          "context": "c1"
+        }
+      ],
+      "wire": {
+        "__SOME_CONTEXT__": {
+          "*": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 3"
+                }
+              ]
+            }
+          },
+          "http.GET": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 2"
+                }
+              ]
+            },
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        },
+        "c1": {
+          "*": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 3"
+                }
+              ]
+            }
+          },
+          "http.GET": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 2"
+                }
+              ]
+            },
+            "app.Thing": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "denied"}, {"condition": "a == 2", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "denied"}, {"condition": "a == 2", "decision": "denied"}, {"condition": "a == 3", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}, {"condition": "a == 2", "decision": "undetermined"}, {"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}, {"condition": "a == 2", "decision": "undetermined"}, {"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": "a == 2", "decision": "denied"}, {"condition": "a == 3", "decision": "denied"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "allowed", "conditions": [{"condition": "a == 2", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": "a == 2", "decision": "denied"}, {"condition": "a == 3", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 2", "decision": "undetermined"}, {"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Other", "resource": null, "expected": "undetermined", "conditions": [{"condition": "a == 2", "decision": "undetermined"}, {"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": "a == 3", "decision": "denied"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": "a == 3", "decision": "denied"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": "a == 3", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Thing", "resource": null, "expected": "undetermined", "conditions": [{"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 1}, "expected": "denied", "conditions": [{"condition": "a == 3", "decision": "denied"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 2}, "expected": "denied", "conditions": [{"condition": "a == 3", "decision": "denied"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {"a": 3}, "expected": "allowed", "conditions": [{"condition": "a == 3", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 3", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.DELETE", "resource_type": "app.Other", "resource": null, "expected": "undetermined", "conditions": [{"condition": "a == 3", "decision": "undetermined"}]}
+      ]
+    },
+    {
+      "name": "literal_star_keys",
+      "description": "A request whose key is \"*\" matches the \"*\" key once.",
+      "assignments": [
+        {
+          "definition": {
+            "*": {
+              "*": {
+                "condition": "a == 1"
+              }
+            }
+          },
+          "context": "*"
+        }
+      ],
+      "wire": {
+        "*": {
+          "*": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        },
+        "__SOME_CONTEXT__": {
+          "*": {
+            "*": {
+              "conditions": [
+                {
+                  "condition": "a == 1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "probes": [
+        {"context": "*", "action": "*", "resource_type": "*", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "*", "action": "*", "resource_type": "*", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "*", "action": "*", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "*", "action": "*", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "*", "action": "http.GET", "resource_type": "*", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "*", "action": "http.GET", "resource_type": "*", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "*", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "*", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "*", "resource_type": "*", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "*", "resource_type": "*", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "*", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "*", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "*", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "*", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {"a": 1}, "expected": "allowed", "conditions": [{"condition": "a == 1", "decision": "allowed"}]},
+        {"context": "c1", "action": "http.GET", "resource_type": "app.Thing", "resource": {}, "expected": "undetermined", "conditions": [{"condition": "a == 1", "decision": "undetermined"}]}
+      ]
+    }
+  ]
+}
