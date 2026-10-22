@@ -28,7 +28,12 @@ A PostToolUse hook ruff-formats Python files after each edit.
 - `permissions.py` — `policy_for(request)` builds a user's `RootPolicy` from the
   settings defaults plus their `RoleAssignment`s; `IsAuthorized` is the DRF
   permission class. Every grant is also added under `SOME_CONTEXT` so "allowed in
-  any context" checks (list/create) work.
+  any context" checks (list/create) work. The policy is cached per request, so
+  checks made after a save use the grants from before it.
+- `rest.py` — `AccessControlledModelViewSet.perform_update` saves in a transaction
+  on the write DB, then re-checks a fresh copy with the `IsAuthorized` permissions
+  only (`get_post_save_permissions`) and rolls back on denial; creates/updates into
+  a `__`-prefixed context are rejected. Overrides must call `super()`.
 - `filters.py` — `RbacFilter` restricts querysets to `rbac_context__in` the user's
   contexts.
 - `conf.py` — lazy resolution of the `SCOPED_RBAC` setting (dict, dotted path,
@@ -71,8 +76,6 @@ A PostToolUse hook ruff-formats Python files after each edit.
 
 - `authentication.py::ConditionalAnonymousAuthentication` references undefined
   names and cannot run; it is unused.
-- `IsAuthorized.contexts_for` returns `None` when the object has `rbac_contexts`,
-  and `has_object_permission` checks `obj.rbac_context` instead of the loop's
-  `context`. Changing either alters authorization behaviour — confirm intent first.
+- `UserViewSet` object checks still read `obj.rbac_context`, which `User` lacks (#15).
 - Root `manage.py` points at a nonexistent `scoped_rbac.settings`; use
   `examples/manage.py`.
