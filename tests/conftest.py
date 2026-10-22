@@ -1,7 +1,43 @@
 import os
 import sys
 
+import pytest
+
 from .fixtures import editor_user, not_authorized_user, staff_user, superuser
+
+# Fixtures for the update-authorization tests. `.helpers` imports Django models, so
+# it is imported lazily: this module is loaded before `pytest_configure` sets up
+# Django.
+
+
+@pytest.fixture
+def user(django_user_model):
+    """A user without grants; tests grant what they need."""
+    return django_user_model.objects.create(username="context-a-admin")
+
+
+@pytest.fixture
+def ra_patcher_in_a(user):
+    """`user` may PATCH and GET RoleAssignments in context A only; returns the
+    user's own RoleAssignment (in A)."""
+    from .helpers import RA, assign, make_role
+
+    role = make_role({"http.PATCH": [RA], "http.GET": [RA]}, "A")
+    return assign(user, role, "A")
+
+
+@pytest.fixture
+def read_replica():
+    from .helpers import ReadReplicaRouter, installed_routers
+
+    yield from installed_routers(ReadReplicaRouter())
+
+
+@pytest.fixture
+def other_database():
+    from .helpers import OtherDatabaseRouter, installed_routers
+
+    yield from installed_routers(OtherDatabaseRouter())
 
 
 def pytest_addoption(parser):

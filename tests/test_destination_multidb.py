@@ -8,13 +8,26 @@ the primary.
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from django.db import router
-from django.test import override_settings
 from django.utils.timezone import now
-from rest_framework.test import APIRequestFactory, force_authenticate
 
 from scoped_rbac.models import Role, RoleAssignment
 
+from .helpers import (
+    DERIVED,
+    DERIVED_URL,
+    EXAMPLE,
+    RA,
+    RA_LIST_URL,
+    RA_URL,
+    TAGGED,
+    TAGGED_URL,
+    assert_permission_denied,
+    call_view,
+    client_for,
+    grant,
+    role_link,
+    user_link,
+)
 from .models import (
     ExampleAccessControlledModel,
     ExampleContextTag,
@@ -24,71 +37,8 @@ from .models import (
 )
 from .rest import ExampleAccessControlledModelViewSet
 from .serializers import ExampleAccessControlledModelSerializer
-from .test_destination_context import (
-    DERIVED,
-    DERIVED_URL,
-    EXAMPLE,
-    EXAMPLE_URL,
-    RA,
-    RA_LIST_URL,
-    RA_URL,
-    TAGGED,
-    TAGGED_URL,
-    assert_permission_denied,
-    client_for,
-    grant,
-    role_link,
-    user_link,
-)
 
 BOTH = ("default", "replica")
-
-
-class ReadReplicaRouter:
-    """Primary/replica: every read goes to the replica, every write to the primary."""
-
-    def db_for_read(self, model, **hints):
-        return "replica"
-
-    def db_for_write(self, model, **hints):
-        return "default"
-
-    def allow_relation(self, obj1, obj2, **hints):
-        return True
-
-
-class OtherDatabaseRouter:
-    """Routes the derived-context models (reads and writes) to "other"."""
-
-    routed = (ExampleDerivedContextModel, ExampleFolder)
-
-    def db_for_read(self, model, **hints):
-        return "other" if model in self.routed else None
-
-    db_for_write = db_for_read
-
-
-def routers(*installed):
-    """Install `installed` for the test only; check Django resets the routers."""
-    with override_settings(DATABASE_ROUTERS=list(installed)):
-        assert router.routers == list(installed)
-        yield
-    assert router.routers == []
-
-
-@pytest.fixture
-def read_replica():
-    yield from routers(ReadReplicaRouter())
-
-
-@pytest.fixture
-def other_database():
-    yield from routers(OtherDatabaseRouter())
-
-
-@pytest.fixture
-def user(django_user_model):
-    return django_user_model.objects.create(username="context-a-admin")
 
 
 def make_user(django_user_model, alias, **fields):
@@ -233,11 +183,5 @@ class SavesElsewhereViewSet(ExampleAccessControlledModelViewSet):
 def test_update_saved_outside_the_write_database_fails_closed(user):
     grant(user, {"http.PATCH": [EXAMPLE]}, "A")
     target = ExampleAccessControlledModel.objects.create(name="x", rbac_context="A")
-    view = SavesElsewhereViewSet.as_view({"patch": "partial_update"})
-    request = APIRequestFactory().patch(
-        EXAMPLE_URL.format(target.pk), {"name": "y"}, format="json"
-    )
-    force_authenticate(request, user=user)
-
     with pytest.raises(ImproperlyConfigured, match="'other'"):
-        view(request, pk=str(target.pk))
+        call_view(SavesElsewhereViewSet, user, "patch", {"name": "y"}, pk=target.pk)
