@@ -11,7 +11,9 @@ v0.9.2
 
 * Merging roles whose grants combine conditional and unconditional permissions no
   longer raises, and which grants a merge allows no longer depends on the order
-  roles are combined (#2, #3).
+  roles are combined (#2, #3). Conditions that some merges silently dropped now
+  take effect, so a request that 0.9.1 denied may be allowed when a role grants it
+  conditionally.
 * ``sum_with`` on ``Expression``, ``Operator``, ``ExpressionList`` and
   ``CompoundPolicy`` raises ``NotImplementedError`` for a value it cannot merge,
   instead of returning ``None`` or failing with ``AttributeError`` or
@@ -22,8 +24,9 @@ v0.9.2
   such conditions are ignored when filtering, so objects allowed only by them are
   not returned (404 on retrieve). A settings default given as a ``CompoundPolicy``
   instance, which 0.9.1 left unfiltered, is likewise filtered to the contexts it
-  names (possibly to nothing). A default that is only a top-level JSON condition (or
-  a lone ``Expression`` or ``Operator``) is still unfiltered (#5).
+  names (possibly to nothing). A default made only of top-level conditions (JSON
+  conditions, ``Expression``, ``Operator`` or an ``ExpressionList`` of them) is
+  still unfiltered (#5).
 
 v0.9.1
 ====================
