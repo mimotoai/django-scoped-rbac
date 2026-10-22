@@ -8,8 +8,10 @@ from scoped_rbac.permissions import IsAuthorized
 from scoped_rbac.rest import RoleAssignmentViewSet
 
 from .helpers import (
+    BOTH_CONTEXTS,
     EXAMPLE,
     AllowAll,
+    BothContextsViewSet,
     DenyAll,
     NamedModelViewSet,
     assert_permission_denied,
@@ -17,7 +19,7 @@ from .helpers import (
     grant,
     with_permissions,
 )
-from .models import ExampleAccessControlledModel
+from .models import ExampleAccessControlledModel, ExampleBothContextsModel
 
 
 class NotLocked(BasePermission):
@@ -98,3 +100,58 @@ def test_overriding_post_save_permissions_to_none_skips_the_check(
     assert response.status_code == 200, response.content
     ra_patcher_in_a.refresh_from_db()
     assert ra_patcher_in_a.rbac_context == "V"
+
+
+# A model with an rbac_context column and rbac_contexts: RbacFilter lists objects
+# by the column, so moving the column needs permission in its new value too.
+
+
+@pytest.mark.django_db
+def test_moving_rbac_context_column_to_unauthorized_context_is_forbidden(user):
+    grant(user, {"http.PATCH": [BOTH_CONTEXTS]}, "A")
+    target = ExampleBothContextsModel.objects.create(ctx_a="A", rbac_context="A")
+
+    response = call_view(
+        BothContextsViewSet, user, "patch", {"rbac_context": "Z"}, pk=target.pk
+    )
+
+    assert_permission_denied(response)
+    target.refresh_from_db()
+    assert (target.ctx_a, target.rbac_context) == ("A", "A")
+
+
+@pytest.mark.django_db
+def test_moving_rbac_context_column_to_granted_context_is_allowed(user):
+    grant(user, {"http.PATCH": [BOTH_CONTEXTS]}, "A", "Z")
+    target = ExampleBothContextsModel.objects.create(ctx_a="A", rbac_context="A")
+
+    response = call_view(
+        BothContextsViewSet, user, "patch", {"rbac_context": "Z"}, pk=target.pk
+    )
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.rbac_context == "Z"
+
+
+@pytest.mark.parametrize(
+    "granted, new_ctx_a, status",
+    [(("A",), "Z", 403), (("A", "B"), "B", 200)],
+    ids=["ungranted", "granted"],
+)
+@pytest.mark.django_db
+def test_unchanged_rbac_context_column_follows_rbac_contexts(
+    user, granted, new_ctx_a, status
+):
+    # rbac_context "C" is ungranted but unchanged, so only ctx_a decides.
+    grant(user, {"http.PATCH": [BOTH_CONTEXTS]}, *granted)
+    target = ExampleBothContextsModel.objects.create(ctx_a="A", rbac_context="C")
+
+    response = call_view(
+        BothContextsViewSet, user, "patch", {"ctx_a": new_ctx_a}, pk=target.pk
+    )
+
+    assert response.status_code == status, response.content
+    target.refresh_from_db()
+    assert target.ctx_a == (new_ctx_a if status == 200 else "A")
+    assert target.rbac_context == "C"

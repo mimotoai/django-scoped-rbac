@@ -111,16 +111,28 @@ class IsAuthorized(permissions.BasePermission):
         """
         if not hasattr(view, "resource_type_iri_for"):
             return True
-        effective_policy = policy_for(request)
         contexts = self.contexts_for(obj)
-        for context in contexts:
-            if effective_policy.should_allow(
-                policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
-                context,
-                obj,
-            ):
-                return True
-        return False
+        if not contexts:
+            # An object with no contexts is granted by no role; only superusers
+            # (whose policy_for allows everything) may act on it.
+            return bool(request.user.is_superuser)
+        return any(
+            self.has_context_permission(request, view, obj, context)
+            for context in contexts
+        )
+
+    def has_context_permission(self, request, view, obj, context):
+        """
+        True if the request's action on `obj`'s resource type is allowed in
+        `context`, with `obj` as the resource for any condition.
+        """
+        if not hasattr(view, "resource_type_iri_for"):
+            return True
+        return policy_for(request).should_allow(
+            policy.Permission(http_action_iri_for(request), obj.resource_type.iri),
+            context,
+            obj,
+        )
 
     def has_permission(self, request, view):
         """

@@ -163,7 +163,22 @@ RESERVED_VARIANTS = {
     "padded": " __SOME_CONTEXT__ ",
     "newline": "__SOME_CONTEXT__\n",
 }
-ALLOWED_LOOKALIKES = {"interior": "a__b", "single": "_x", "trailing": "x__"}
+INVISIBLE_PREFIXES = {
+    "combining-grapheme-joiner": "\u034f",
+    "variation-selector": "\ufe0f",
+    "hangul-filler": "\u3164",
+    "braille-blank": "\u2800",
+    "control": "\x01",
+}
+RESERVED_VARIANTS.update(
+    {f"{name}-prefix": f"{p}__SOME_CONTEXT__" for name, p in INVISIBLE_PREFIXES.items()}
+)
+ALLOWED_LOOKALIKES = {
+    "interior": "a__b",
+    "single": "_x",
+    "trailing": "x__",
+    "decomposed-e-acute": "e\u0301__",
+}
 
 
 @pytest.mark.parametrize(

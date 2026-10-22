@@ -329,3 +329,34 @@ def test_patch_repeating_the_same_primary_key_is_allowed(user):
     assert response.status_code == 200, response.content
     mine.refresh_from_db()
     assert mine.name == "x"
+
+
+# Objects with no contexts: denied, except for superusers
+
+
+@pytest.mark.django_db
+def test_superuser_get_and_patch_on_object_with_no_contexts_are_allowed(superuser):
+    target = tagged()
+    tag_a = ExampleContextTag.objects.create(ctx="A")
+    client = client_for(superuser.instance)
+
+    got = client.get(TAGGED_URL.format(target.pk))
+    patched = client.patch(
+        TAGGED_URL.format(target.pk), {"tags": [tag_a.pk]}, format="json"
+    )
+
+    assert got.status_code == 200, got.content
+    assert patched.status_code == 200, patched.content
+    assert target.rbac_contexts == ["A"]
+
+
+@pytest.mark.django_db
+def test_grant_in_default_context_does_not_cover_object_with_no_contexts(user):
+    grant(user, {"http.PATCH": [TAGGED]}, "")
+    target = tagged()
+
+    response = client_for(user).patch(
+        TAGGED_URL.format(target.pk), {"tags": []}, format="json"
+    )
+
+    assert_permission_denied(response)

@@ -20,7 +20,7 @@ Unreleased
   per request and caches them on the request).
 * ``IsAuthorized`` checks objects with multiple ``rbac_contexts`` against each of
   them (permission in any one suffices) instead of failing; an object with no
-  contexts is denied.
+  contexts is denied, except to superusers.
 * ``PATCH`` on ``RoleViewSet`` no longer raises ``TypeError``.
 
 **Changed:**
@@ -33,15 +33,23 @@ Unreleased
   ``X | IsAuthorized``, the destination still needs RBAC permission even when ``X``
   allowed the request. Application permissions are not re-run against the new
   state.
+* On a model with an ``rbac_context`` column that also defines ``rbac_contexts``,
+  an update that changes the column also needs the permission in the column's new
+  value (``RbacFilter`` lists objects by the column), in addition to permission in
+  one of ``rbac_contexts``. This does not apply to creates (#6).
 * ``perform_create`` and ``perform_update`` run the save and these checks in a
   transaction on the model's write database (``router.db_for_write``) and check a
-  fresh instance read from it, never a read replica.
+  fresh instance read from it (through ``get_queryset()``, so annotations are
+  present), never a read replica. They accept ``**save_kwargs`` and call
+  ``serializer.save(**save_kwargs)``, so overrides pass extra save arguments (e.g.
+  ``owner=self.request.user``) through ``super()``.
 * Create and update responses show the object as re-read from the write database
   (including changes made by ``save()`` or signals).
 * Writes into the reserved context namespace are rejected with 400 (code
   ``reserved_rbac_context``) and rolled back: any context that, after Unicode NFKC
-  normalisation, removing format characters (category Cf) and stripping
-  whitespace, starts with ``__`` (such as ``__SOME_CONTEXT__``). All of an object's
+  normalisation, removing invisible characters (categories Cf, Cc, Mn and Me, and
+  the fillers U+115F, U+1160, U+3164, U+FFA0 and U+2800) and stripping whitespace,
+  starts with ``__`` (such as ``__SOME_CONTEXT__``). All of an object's
   contexts are checked: ``rbac_context``, ``rbac_contexts``, and those from
   permission classes overriding ``contexts_for``. Existing rows are not affected.
 * An update that changes the object's primary key is rejected with 400 (code
@@ -54,17 +62,23 @@ Unreleased
 **Added:**
 
 * ``AccessControlledModelViewSet.get_post_save_permissions()`` and
-  ``check_post_save_permissions(request, obj)``: the permissions checked against
-  the saved object, and the check itself. Override the former (e.g. return
-  ``[]``) to change or skip the post-save check.
-* ``AccessControlledModelViewSet.contexts_of(instance)``,
-  ``check_not_reserved_context(instance)``, ``persisted_instance(serializer, db)``
-  and ``model_for(serializer)`` as extension points.
+  ``check_post_save_permissions(request, obj, new_rbac_context=None)``: the
+  permissions checked against the saved object, and the check itself. Override the
+  former (e.g. return ``[]``) to change or skip the post-save check.
+* ``IsAuthorized.has_context_permission(request, view, obj, context)``: whether the
+  request is allowed in one given context; used for a moved ``rbac_context`` column
+  and by ``has_object_permission``.
+* ``AccessControlledModelViewSet.check_not_reserved_context(instance)`` and
+  ``model_for(serializer)`` as extension points.
 
 **Notes:**
 
 * Subclasses overriding ``perform_create`` or ``perform_update`` must call
-  ``super()``, or these checks are skipped.
+  ``super()`` (passing extra save arguments as keyword arguments), or these checks
+  are skipped.
+* A create whose serializer leaves no saved model instance in
+  ``serializer.instance`` (e.g. ``create()`` returns an unsaved object) is not
+  checked after saving, since there is nothing persisted to check.
 * Rolling back a denied write requires a transactional database backend; with e.g.
   MySQL's MyISAM the error is returned but the write remains. Side effects outside
   the database, such as signal handlers sending email, may run before a rollback.

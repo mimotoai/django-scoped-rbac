@@ -28,6 +28,7 @@ from .helpers import (
     call_view,
     client_for,
     grant,
+    installed_routers,
     role_link,
     user_link,
 )
@@ -202,3 +203,40 @@ def test_create_into_reserved_context_on_another_database_is_rolled_back(
 
     assert_reserved_context_rejected(response)
     assert not ExampleDerivedContextModel.objects.using("other").exists()
+
+
+class StickyWriteRouter:
+    """Reads the derived-context models from "other"; writes an existing instance
+    back to the database it came from (the `instance` hint), new ones to default."""
+
+    routed = (ExampleDerivedContextModel, ExampleFolder)
+
+    def db_for_read(self, model, **hints):
+        return "other" if model in self.routed else None
+
+    def db_for_write(self, model, instance=None, **hints):
+        if model in self.routed and instance is not None and instance._state.db:
+            return instance._state.db
+        return None
+
+
+@pytest.fixture
+def sticky_writes():
+    yield from installed_routers(StickyWriteRouter())
+
+
+@pytest.mark.django_db(databases=["default", "other"])
+def test_write_database_is_chosen_with_the_instance_hint(user, sticky_writes):
+    grant(user, {"http.PATCH": [DERIVED]}, "A")
+    folder = ExampleFolder.objects.using("other").create(ctx="A")
+    target = ExampleDerivedContextModel.objects.using("other").create(
+        name="doc", folder=folder
+    )
+
+    response = client_for(user).patch(
+        DERIVED_URL.format(target.pk), {"name": "renamed"}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    target.refresh_from_db()
+    assert target.name == "renamed"
