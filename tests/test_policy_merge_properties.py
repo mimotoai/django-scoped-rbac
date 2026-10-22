@@ -24,12 +24,13 @@ KEYS = ("x", "y", "z", "w")
 KEY_TUPLES = [
     keys for length in range(4) for keys in itertools.product(KEYS, repeat=length)
 ]
-RESOURCES = ({"a": 1}, {"a": 2}, {}, None, True, False)
+RESOURCES = ({"a": 1}, {"a": 2}, {"a": 3}, {}, None, True, False)
 PROBES = [(keys, resource) for keys in KEY_TUPLES for resource in RESOURCES]
 
 CONDITION_A1 = {"condition": "a == 1"}
 CONDITION_A2 = {"condition": "a == 2"}
-# The `istrue` operator is registered in tests/conftest.py: `resource == True`.
+# The `istrue` operator is registered in tests/conftest.py: it allows the resource
+# `True` and a mapping whose "a" is 3.
 OPERATOR = {"condition": {"operator": "istrue"}}
 
 
@@ -59,7 +60,7 @@ POLICIES = {
     "set_x": (from_json("x"), False),
     "set_yz": (from_json(["y", "z"]), False),
     "dict_empty": (from_json({}), False),
-    "dict_x_true": (from_json({"x": True}), False),
+    "dict_true_and_set": (from_json({"x": True, "z": ["y"]}), False),
     "dict_false_and_empty": (from_json({"x": False, "y": []}), False),
     # The #2 reproduction's shapes: a condition, and a plain grant, on an action.
     "dict_x_condition": (from_json([{"x": "a == 1"}]), False),
@@ -85,7 +86,24 @@ POLICIES = {
         merged({"y": {"x": CONDITION_A1}}, {"y": {"x": OPERATOR}}),
         True,
     ),
+    "operator_and_conditions": (merged(OPERATOR, CONDITION_A1, CONDITION_A2), True),
+    # Conditions on an action (depth 1), and on a resource type (depth 2).
+    "action_condition_or_set": (merged([{"x": "a == 1"}], {"x": ["y"]}), False),
+    "resource_operator": (from_json({"x": {"y": OPERATOR}, "y": {"x": True}}), True),
+    "resource_condition_and_operator": (
+        merged({"x": {"y": CONDITION_A2}}, {"x": {"y": OPERATOR}}),
+        True,
+    ),
+    "resource_operator_or_set": (
+        merged({"x": {"y": OPERATOR}}, {"x": {"y": ["z"]}}),
+        True,
+    ),
 }
+
+# The pool's only constant policies; every other one allows some probes and denies
+# others, and no two behave the same.
+ALWAYS_ALLOW = {"true"}
+ALWAYS_DENY = {"false", "set_empty", "dict_empty", "dict_false_and_empty"}
 
 # A smaller pool for the three-way merges, covering every shape above.
 TRIPLE_POLICIES = [
@@ -99,6 +117,8 @@ TRIPLE_POLICIES = [
     "condition_or_dict",
     "operator_or_set",
     "nested_condition_or_set",
+    "action_condition_or_set",
+    "resource_operator",
 ]
 
 RAISES = "raises"
@@ -148,6 +168,27 @@ def assert_allows_union(merged_policy, operand_outcomes, description):
         f"{description}: {len(mismatches)} of {checked} probes wrong, e.g. "
         f"(probe, expected, actual) {mismatches[:3]}"
     )
+
+
+def test_pool_policies_are_distinct_and_not_constant():
+    vectors = {name: outcomes(build()) for name, (build, _) in POLICIES.items()}
+
+    for name in ALWAYS_ALLOW:
+        assert set(vectors[name]) == {True}, name
+    for name in ALWAYS_DENY:
+        assert set(vectors[name]) == {False}, name
+    varying = {
+        name: vector
+        for name, vector in vectors.items()
+        if name not in ALWAYS_ALLOW | ALWAYS_DENY
+    }
+    assert [n for n, v in varying.items() if not (True in v and False in v)] == []
+    same = [
+        (a, b)
+        for a, b in itertools.combinations(varying, 2)
+        if varying[a] == varying[b]
+    ]
+    assert same == []
 
 
 @pytest.mark.parametrize("name_b", POLICIES)

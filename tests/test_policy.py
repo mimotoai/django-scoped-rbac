@@ -175,7 +175,12 @@ def test_operator():
 
 
 class TestMerging:
-    """`sum_with` across node types (GitLab issues #2 and #3)."""
+    """Regression tests for `sum_with` (GitLab issues #2 and #3).
+
+    The merge contract is tests/test_policy_merge_properties.py. Tests here marked
+    "Characterisation" construct the current node classes directly or pin their
+    `to_json` shapes; the planned PolicyNode rewrite may replace them.
+    """
 
     @pytest.mark.parametrize(
         "first, second",
@@ -198,7 +203,27 @@ class TestMerging:
         plain_type = "Other" if "Other" in str(second) else "Thing"
         assert policy.should_allow("http.GET", plain_type, resource=not_ok) is True
 
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_issue_3_resource_condition_merged_with_condition_list(self, reverse):
+        resource_condition = policy_from_json(
+            {"GET": {"Thing": {"condition": "c == 1"}}}
+        )
+        condition_list = policy_from_json(
+            {"GET": [{"Thing": "a == 1"}, {"Thing": "b == 1"}]}
+        )
+        a, b = resource_condition, condition_list
+        if reverse:
+            a, b = b, a
+
+        policy = a.sum_with(b)
+
+        for allowed in ({"a": 1}, {"b": 1}, {"c": 1}):
+            assert policy.should_allow("GET", "Thing", resource=allowed) is True
+        assert policy.should_allow("GET", "Thing", resource={"a": 2}) is False
+        assert policy.should_allow("GET", "Other", resource={"a": 1}) is False
+
     def test_compound_policies_merge(self):
+        # Characterisation of the current node classes (see the class docstring).
         a = CompoundPolicy(
             policy_dict=PolicyDict({"x": POLICY_TRUE}),
             expressions=ExpressionList(Expression("a == 1")),
@@ -216,12 +241,14 @@ class TestMerging:
         assert policy.should_allow("z", resource={"a": 3}) is False
 
     def test_operator_merged_into_empty_compound_policy_is_kept(self):
+        # Characterisation of the current node classes (see the class docstring).
         operator = Operator({"operator": "istrue"})
 
         assert CompoundPolicy().sum_with(operator).should_allow(resource=True) is True
         assert CompoundPolicy().add_expression(operator).should_allow(resource=True)
 
     def test_merging_conditions_with_a_plain_grant_to_json(self):
+        # Characterisation of the current node classes (see the class docstring).
         policy = Expression("a == 1").sum_with(PolicySet("x"))
 
         assert policy.to_json() == {
@@ -230,6 +257,7 @@ class TestMerging:
         }
 
     def test_to_json_of_merges_that_already_worked_is_unchanged(self):
+        # Characterisation of the current node classes (see the class docstring).
         e1, e2, e3 = Expression("a == 1"), Expression("a == 2"), Expression("a == 3")
         assert e1.sum_with(e2).to_json() == ["a == 1", "a == 2"]
         assert e1.sum_with(e2).sum_with(e3).to_json() == ["a == 3", "a == 1", "a == 2"]
@@ -256,5 +284,6 @@ class TestMerging:
     )
     @pytest.mark.parametrize("other", [None, object(), {"x": True}], ids=repr)
     def test_merging_an_unsupported_type_raises(self, policy, other):
+        # Characterisation of the current node classes (see the class docstring).
         with pytest.raises(NotImplementedError, match="Unsupported type"):
             policy.sum_with(other)
