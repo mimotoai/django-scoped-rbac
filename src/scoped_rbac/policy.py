@@ -300,11 +300,7 @@ class CompoundPolicy(Policy):
         self.policy_dict = PolicyDict({}) if policy_dict is None else policy_dict
         if policy_set is not None:
             self.policy_dict = self.policy_dict.sum_with(policy_set)
-        if expressions is None:
-            expressions = ExpressionList()
-        elif isinstance(expressions, (Expression, Operator)):
-            expressions = ExpressionList(expressions)
-        self.expressions = expressions
+        self.expressions = ExpressionList() if expressions is None else expressions
 
     def should_allow(self, *args, **kwargs):
         return self.policy_dict.should_allow(
@@ -328,17 +324,26 @@ class CompoundPolicy(Policy):
             )
         raise NotImplementedError(f"Unsupported type {type(other_policy)}")
 
+    @staticmethod
+    def _conditions(expressions):
+        """The conditions in `expressions`: an `ExpressionList`, or a lone
+        `Expression` or `Operator` in a hand-built `CompoundPolicy`."""
+        if isinstance(expressions, (Expression, Operator)):
+            return (expressions,)
+        return expressions.expressions
+
     def add_expression(self, expression):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
-            expressions=self.expressions.add(expression),
+            expressions=ExpressionList(expression, *self._conditions(self.expressions)),
         )
 
     def add_expression_list(self, expression_list):
         return CompoundPolicy(
             policy_dict=self.policy_dict,
             expressions=ExpressionList(
-                *self.expressions.expressions, *expression_list.expressions
+                *self._conditions(self.expressions),
+                *self._conditions(expression_list),
             ),
         )
 

@@ -320,10 +320,17 @@ class TestMerging:
                 assert actual is expected, (keys, resource)
         contexts = RootPolicy().add_policy(policy).get_contexts_for(permission_one)
         assert set(contexts) == {"w"} | other_contexts
-        if not any(isinstance(p, Operator) for p in (lone, other)) and not isinstance(
-            other, ExpressionList
-        ):
-            assert isinstance(policy.to_json()["expressions"], list)
+        if isinstance(lone, Expression):
+            # `expressions` serialises as given, as in 0.9.1, until merged with
+            # another condition.
+            assert compound.to_json() == {
+                "expressions": "a == 1",
+                "policy_dict": {"w": True},
+            }
+            if isinstance(other, (PolicySet, PolicyDict)):
+                assert policy.to_json()["expressions"] == "a == 1"
+            elif not isinstance(other, ExpressionList):
+                policy.to_json()
 
     @pytest.mark.parametrize(
         "policy",
