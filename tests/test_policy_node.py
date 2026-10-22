@@ -390,3 +390,72 @@ def test_a_lone_condition_settings_default_is_a_node(monkeypatch):
     )
 
     assert conf.policy_for_staff() == node(A1)
+
+
+class TestMessages:
+    """A condition dict may carry a "message" describing the condition."""
+
+    M1 = Expression("a == 1", message="a must be 1")
+
+    @pytest.mark.parametrize(
+        "json_policy, expected",
+        [
+            ({"condition": "a == 1", "message": "a must be 1"}, node(M1)),
+            (
+                {"condition": {"operator": "istrue", "n": 2}, "message": "m"},
+                node(Operator({"operator": "istrue", "n": 2}, message="m")),
+            ),
+            (
+                {"GET": {"Thing": {"condition": "a == 1", "message": "a must be 1"}}},
+                node(GET=node(Thing=node(M1))),
+            ),
+            # An action condition in the list form may be a condition dict, at the
+            # top level and under an action.
+            (
+                [{"DELETE": {"condition": "a == 1", "message": "a must be 1"}}, "GET"],
+                node(DELETE=node(M1), GET=POLICY_TRUE),
+            ),
+            ([{"DELETE": {"condition": "a == 1"}}], node(DELETE=node(A1))),
+            (
+                {"GET": [{"Thing": {"condition": "a == 1", "message": "a must be 1"}}]},
+                node(GET=node(Thing=node(M1))),
+            ),
+            # Still a CEL string, as before.
+            ([{"DELETE": "a == 1"}], node(DELETE=node(A1))),
+        ],
+        ids=repr,
+    )
+    def test_parsed(self, json_policy, expected):
+        assert policy_from_json(json_policy) == expected
+
+    def test_action_condition_dict_is_evaluated(self):
+        policy = policy_from_json([{"DELETE": {"condition": "a == 1", "message": "m"}}])
+
+        assert policy.evaluate("DELETE", "Thing", resource={"a": 1}) is ALLOWED
+        assert policy.evaluate("DELETE", "Thing", resource={"a": 2}) is DENIED
+
+    def test_messages_travel_through_merges(self):
+        with_message = policy_from_json(
+            [{"DELETE": {"condition": "a == 1", "message": "a must be 1"}}]
+        )
+        other_message = policy_from_json(
+            [{"DELETE": {"condition": "a == 1", "message": "other"}}]
+        )
+        without = policy_from_json([{"DELETE": "a == 1"}])
+
+        merged = with_message.sum_with(other_message).sum_with(without)
+
+        assert merged.children["DELETE"].conditions == (
+            self.M1,
+            Expression("a == 1", message="other"),
+            A1,
+        )
+        assert with_message.sum_with(with_message) == with_message
+        root = RootPolicy().add_policy_for_context(merged, "ctx")
+        assert root.to_json()["children"]["ctx"]["children"]["DELETE"] == {
+            "conditions": [
+                {"condition": "a == 1", "message": "a must be 1"},
+                {"condition": "a == 1", "message": "other"},
+                {"condition": "a == 1"},
+            ]
+        }

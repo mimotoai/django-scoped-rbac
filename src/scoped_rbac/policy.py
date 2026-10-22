@@ -440,11 +440,11 @@ def action_policy_from_json(json_policy):
     ActionPolicy: Bool | Condition | String::ActionName | ActionPolicyList | ActionPolicyDict
     ActionPolicyList: [ (String::ActionName | ActionCondition)+ ]
     ActionPolicyDict: { (String::ActionName: (Bool | Condition | String::ResourceName | ResourcePolicyList | ResourcePolicyDict))+ }
-    ActionCondition: { String::ActionName: String::Expr }
+    ActionCondition: { String::ActionName: String::Expr | Condition }
     ResourcePolicyList: [ (String::ResourceName | ResourceCondition)+ ]
     ResourcePolicyDict: { (String::ResourceName: (Bool | String::Expr))+ }
     ResourceCondition: { String::ResourceName: String::Expr | OperatorConfig }
-    Condition: { 'condition': String::Expr | OperatorConfig }
+    Condition: { 'condition': String::Expr | OperatorConfig, ['message': String] }
     OperatorConfig: { 'operator': String::OperatorName, additionalProperties... }
     ```
     """
@@ -506,10 +506,16 @@ def policy_from_action_policy_dict(policy_dict):
 def policy_from_action_condition(action_condition):
     """
     ```
-    ActionCondition: { String::ActionName: String::Expr }
+    ActionCondition: { String::ActionName: String::Expr | Condition }
     ```
     """
-    return _dict({key: Expression(value) for key, value in action_condition.items()})
+
+    def as_condition(value):
+        if isinstance(value, dict) and "condition" in value:
+            return policy_from_condition(value)
+        return Expression(value)
+
+    return _dict({key: as_condition(value) for key, value in action_condition.items()})
 
 
 def policy_from_resource_policy_list(policy_list):
@@ -564,15 +570,16 @@ def policy_from_resource_condition(resource_condition):
 def policy_from_condition(condition):
     """
     ```
-    Condition: { 'condition': String::Expr | OperatorConfig }
+    Condition: { 'condition': String::Expr | OperatorConfig, ['message': String] }
     ```
     A value that is neither (which the grammar does not allow, issue #17) is kept
     as an Expression, which fails when it is evaluated.
     """
     condition_value = condition.get("condition")
+    message = condition.get("message")
     if isinstance(condition_value, dict) and "operator" in condition_value:
-        return Operator(condition_value)
-    return Expression(condition_value)
+        return Operator(condition_value, message)
+    return Expression(condition_value, message)
 
 
 def policy_from_bool(b):
